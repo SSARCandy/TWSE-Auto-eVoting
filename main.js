@@ -147,15 +147,6 @@ function setupApplicationMenu() {
         { label: '強制重新載入 (Force Reload)', role: 'forceReload' },
         { type: 'separator' },
         {
-          label: '左側選單開發者工具 (Main UI DevTools)',
-          accelerator: isMac ? 'Cmd+Option+I' : 'Ctrl+Shift+I',
-          click: () => {
-            if (mainWindow) {
-                mainWindow.webContents.toggleDevTools();
-            }
-          }
-        },
-        {
           label: '右側網頁開發者工具 (BrowserView DevTools)',
           accelerator: 'F12',
           click: () => {
