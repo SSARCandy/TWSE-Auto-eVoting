@@ -1,4 +1,4 @@
-const { app, BrowserWindow, BrowserView, ipcMain, session, dialog } = require('electron');
+const { app, BrowserWindow, BrowserView, ipcMain, session, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -43,6 +43,22 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'src/renderer/index.html'));
 
+  // Handler for aligning DevTools shortcuts (F12 or Ctrl+Shift+I)
+  const handleDevToolsShortcut = (targetWebContents) => (event, input) => {
+    if (input.type === 'keyDown') {
+      const isF12 = input.key === 'F12';
+      const isCtrlShiftI = input.key.toLowerCase() === 'i' && (input.control || input.meta) && input.shift;
+      
+      if (isF12 || isCtrlShiftI) {
+        targetWebContents.toggleDevTools();
+        event.preventDefault();
+      }
+    }
+  };
+
+  // Enable toggling DevTools for the main window
+  mainWindow.webContents.on('before-input-event', handleDevToolsShortcut(mainWindow.webContents));
+
   browserView = new BrowserView({
     webPreferences: {
       nodeIntegration: false,
@@ -60,6 +76,8 @@ function createWindow() {
 
   updateBounds();
   mainWindow.on('resize', updateBounds);
+
+  browserView.webContents.on('before-input-event', handleDevToolsShortcut(browserView.webContents));
 
   const CONSTANTS = require('./src/constants');
   browserView.webContents.loadURL(CONSTANTS.URLS.LOGIN);
@@ -80,7 +98,88 @@ function createWindow() {
   });
 }
 
+function setupApplicationMenu() {
+  const isMac = process.platform === 'darwin';
+
+  const template = [
+    ...(isMac
+      ? [{
+          label: app.name,
+          submenu: [
+            { role: 'about' },
+            { type: 'separator' },
+            { role: 'services' },
+            { type: 'separator' },
+            { role: 'hide' },
+            { role: 'hideOthers' },
+            { role: 'unhide' },
+            { type: 'separator' },
+            { role: 'quit' }
+          ]
+        }]
+      : []),
+    {
+      label: '編輯 (Edit)',
+      submenu: [
+        { label: '復原 (Undo)', role: 'undo' },
+        { label: '重做 (Redo)', role: 'redo' },
+        { type: 'separator' },
+        { label: '剪下 (Cut)', role: 'cut' },
+        { label: '複製 (Copy)', role: 'copy' },
+        { label: '貼上 (Paste)', role: 'paste' },
+        ...(isMac
+          ? [
+              { role: 'pasteAndMatchStyle' },
+              { role: 'delete' },
+              { label: '全選 (Select All)', role: 'selectAll' },
+            ]
+          : [
+              { label: '刪除 (Delete)', role: 'delete' },
+              { type: 'separator' },
+              { label: '全選 (Select All)', role: 'selectAll' }
+            ])
+      ]
+    },
+    {
+      label: '檢視 (View)',
+      submenu: [
+        { label: '重新載入 (Reload)', role: 'reload' },
+        { label: '強制重新載入 (Force Reload)', role: 'forceReload' },
+        { type: 'separator' },
+        {
+          label: '左側選單開發者工具 (Main UI DevTools)',
+          accelerator: isMac ? 'Cmd+Option+I' : 'Ctrl+Shift+I',
+          click: () => {
+            if (mainWindow) {
+                mainWindow.webContents.toggleDevTools();
+            }
+          }
+        },
+        {
+          label: '右側網頁開發者工具 (BrowserView DevTools)',
+          accelerator: 'F12',
+          click: () => {
+            if (browserView) {
+                browserView.webContents.toggleDevTools();
+            }
+          }
+        },
+        { type: 'separator' },
+        { label: '實際大小 (Reset Zoom)', role: 'resetZoom' },
+        { label: '放大 (Zoom In)', role: 'zoomIn' },
+        { label: '縮小 (Zoom Out)', role: 'zoomOut' },
+        { type: 'separator' },
+        { label: '切換全螢幕 (Toggle Full Screen)', role: 'togglefullscreen' }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
 app.whenReady().then(() => {
+  setupApplicationMenu();
   createWindow();
 
   app.on('activate', function () {
