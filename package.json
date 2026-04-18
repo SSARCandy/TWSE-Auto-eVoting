@@ -1,16 +1,48 @@
 {
-  "name": "twse-evoting",
+  "name": "twse-auto-evoting",
   "version": "1.0.0",
-  "description": "",
+  "description": "台灣股東會自動投票系統",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron ."
+    "dev": "electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:all": "electron-builder -mw"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "electron": "^30.0.0"
+    "electron": "^30.0.0",
+    "electron-builder": "^26.8.1",
+    "electron-icon-builder": "^2.0.1"
+  },
+  "build": {
+    "appId": "com.ssarcandy.twse-auto-evoting",
+    "productName": "TWSE Auto eVoting",
+    "artifactName": "TWSE-Auto-eVoting-v${version}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "assets/icons/icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "assets/icons/icon.icns",
+      "category": "public.app-category.utilities"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "assets/**/*"
+    ]
   }
 }

@@ -33,6 +33,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
+    icon: path.join(__dirname, 'assets/icons/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -48,7 +49,7 @@ function createWindow() {
     if (input.type === 'keyDown') {
       const isF12 = input.key === 'F12';
       const isCtrlShiftI = input.key.toLowerCase() === 'i' && (input.control || input.meta) && input.shift;
-      
+
       if (isF12 || isCtrlShiftI) {
         targetWebContents.toggleDevTools();
         event.preventDefault();
@@ -104,19 +105,19 @@ function setupApplicationMenu() {
   const template = [
     ...(isMac
       ? [{
-          label: app.name,
-          submenu: [
-            { role: 'about' },
-            { type: 'separator' },
-            { role: 'services' },
-            { type: 'separator' },
-            { role: 'hide' },
-            { role: 'hideOthers' },
-            { role: 'unhide' },
-            { type: 'separator' },
-            { role: 'quit' }
-          ]
-        }]
+        label: app.name,
+        submenu: [
+          { role: 'about' },
+          { type: 'separator' },
+          { role: 'services' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { role: 'quit' }
+        ]
+      }]
       : []),
     {
       label: '編輯 (Edit)',
@@ -129,15 +130,15 @@ function setupApplicationMenu() {
         { label: '貼上 (Paste)', role: 'paste' },
         ...(isMac
           ? [
-              { role: 'pasteAndMatchStyle' },
-              { role: 'delete' },
-              { label: '全選 (Select All)', role: 'selectAll' },
-            ]
+            { role: 'pasteAndMatchStyle' },
+            { role: 'delete' },
+            { label: '全選 (Select All)', role: 'selectAll' },
+          ]
           : [
-              { label: '刪除 (Delete)', role: 'delete' },
-              { type: 'separator' },
-              { label: '全選 (Select All)', role: 'selectAll' }
-            ])
+            { label: '刪除 (Delete)', role: 'delete' },
+            { type: 'separator' },
+            { label: '全選 (Select All)', role: 'selectAll' }
+          ])
       ]
     },
     {
@@ -151,7 +152,7 @@ function setupApplicationMenu() {
           accelerator: 'F12',
           click: () => {
             if (browserView) {
-                browserView.webContents.toggleDevTools();
+              browserView.webContents.toggleDevTools();
             }
           }
         },
@@ -161,6 +162,39 @@ function setupApplicationMenu() {
         { label: '縮小 (Zoom Out)', role: 'zoomOut' },
         { type: 'separator' },
         { label: '切換全螢幕 (Toggle Full Screen)', role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: '關於 (About)',
+      submenu: [
+        {
+          label: '關於 TWSE Auto eVoting',
+          click: async () => {
+            const { shell } = require('electron');
+            const pkg = require('./package.json');
+            let releaseDate = '未知';
+            try {
+              // 在封裝後的 asar 檔案中，package.json 的修改時間即為打包/釋出時間
+              const stat = require('fs').statSync(require('path').join(__dirname, 'package.json'));
+              releaseDate = stat.mtime.toISOString().split('T')[0];
+            } catch (e) { }
+
+            const { response } = await dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: '關於 TWSE Auto eVoting',
+              message: `TWSE Auto eVoting\n\n版本 (Version): ${pkg.version}\n日期 (Release Date): ${releaseDate}`,
+              buttons: ['作者網站', 'GitHub'],
+              defaultId: 2,
+              cancelId: 2
+            });
+
+            if (response === 0) {
+              shell.openExternal('https://ssarcandy.tw');
+            } else if (response === 1) {
+              shell.openExternal('https://github.com/SSARCandy/TWSE-eVoting');
+            }
+          }
+        }
       ]
     }
   ];
