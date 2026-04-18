@@ -1,0 +1,89 @@
+name: Nightly Build Release
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Windows App
+        if: matrix.os == 'windows-latest'
+        run: npm run build:win
+        env:
+          # Required for some native modules or dependencies if any
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build macOS App
+        if: matrix.os == 'macos-latest'
+        run: npm run build:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-builds-${{ matrix.os }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+          retention-days: 7
+
+  release:
+    name: Update Nightly Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: app-builds-*
+          path: dist
+          merge-multiple: true
+
+      - name: Delete old Nightly Release
+        uses: dev-drprasad/delete-tag-and-release@v1.1
+        with:
+          delete_release: true
+          tag_name: nightly
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Create Nightly Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          target_commitish: ${{ github.sha }}
+          name: "Nightly Build"
+          body: "Automated nightly build for commit ${{ github.sha }}"
+          prerelease: true
+          files: |
+            dist/*.exe
+            dist/*.dmg
