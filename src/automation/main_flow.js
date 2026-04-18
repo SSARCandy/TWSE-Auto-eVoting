@@ -13,13 +13,13 @@ async function run(webContents, ids, preference, sendLog, sendProgress, isStopRe
 
         const id = ids[i];
         const maskedId = id.substring(0, 4) + '****' + id.substring(8);
-        
+
         // 0. Maintenance Check (00:00 - 07:00 Taiwan Time UTC+8)
         const now = new Date();
         // Calculate Taiwan hour (UTC+8)
         const utcHour = now.getUTCHours();
         const taiwanHour = (utcHour + 8) % 24;
-        
+
         if (taiwanHour >= 0 && taiwanHour < 7) {
             sendLog('目前為系統維護時間 (00:00~07:00)，停止自動作業。', 'error');
             break;
@@ -37,8 +37,8 @@ async function run(webContents, ids, preference, sendLog, sendProgress, isStopRe
             // 2. Login
             const loggedIn = await login.execute(webContents, id, sendLog);
             if (!loggedIn) {
-              sendLog(`[失敗] ${maskedId} 登入失敗，跳過。`, 'error');
-              continue;
+                sendLog(`[失敗] ${maskedId} 登入失敗，跳過。`, 'error');
+                continue;
             }
 
             // 3. Determine companies to process
@@ -52,25 +52,25 @@ async function run(webContents, ids, preference, sendLog, sendProgress, isStopRe
                 targetCodes = companies.map(c => c.code);
                 sendLog(`找到 ${targetCodes.length} 家公司需要處理。`);
             }
-            
+
             // 4. Process each company using Search-based logic for reliability
             for (let j = 0; j < targetCodes.length; j++) {
                 if (isStopRequested()) break;
 
                 const code = targetCodes[j];
-                sendProgress({ 
-                    currentIdIndex: i, 
-                    totalIds: ids.length, 
-                    currentCompanyIndex: j, 
-                    totalCompanies: targetCodes.length 
+                sendProgress({
+                    currentIdIndex: i,
+                    totalIds: ids.length,
+                    currentCompanyIndex: j,
+                    totalCompanies: targetCodes.length
                 });
 
                 sendLog(`[步驟] 搜尋股號: ${code} ...`);
-                
+
                 try {
                     // Navigate to search results for this stock
                     const navResult = await voting.searchAndNavigate(webContents, code, sendLog);
-                    
+
                     if (navResult.type === 'vote') {
                         sendLog(`[投票] 偵測到未投票，開始執行投票程序...`);
                         await voting.voteForCompany(webContents, { code: code, name: '查詢中', rowIndex: 0 }, preference, sendLog, true);
@@ -78,7 +78,7 @@ async function run(webContents, ids, preference, sendLog, sendProgress, isStopRe
                     } else {
                         sendLog(`[檢視] 偵測到已投過，直接進行截圖存證...`);
                     }
-                    
+
                     // 5. Screenshot (Precise detection)
                     sendLog(`[截圖] 正在擷取 ${code} 投票證明...`);
                     const screenshotPath = await screenshot.execute(webContents, id, { code: code, name: '股東會' }, outputDir);
@@ -86,9 +86,9 @@ async function run(webContents, ids, preference, sendLog, sendProgress, isStopRe
 
                     // Delay between companies
                     await new Promise(r => setTimeout(r, 1500));
-                    
+
                     // Return to list for next search
-                    await webContents.loadURL('https://stockservices.tdcc.com.tw/evote/index.html');
+                    await webContents.loadURL(CONSTANTS.URLS.INDEX);
                     await new Promise(r => setTimeout(r, 2000));
 
                 } catch (procError) {
@@ -97,7 +97,7 @@ async function run(webContents, ids, preference, sendLog, sendProgress, isStopRe
                     throw procError;
                 }
             }
-            
+
             // 6. Logout
             await logout.execute(webContents, sendLog);
             sendLog(`[完畢] ${maskedId} 處理流程結束。`, 'info');

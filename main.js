@@ -61,8 +61,8 @@ function createWindow() {
   updateBounds();
   mainWindow.on('resize', updateBounds);
 
-  // Load the target site
-  browserView.webContents.loadURL('https://stockservices.tdcc.com.tw/evote/login/shareholder.html');
+  const CONSTANTS = require('./src/constants');
+  browserView.webContents.loadURL(CONSTANTS.URLS.LOGIN);
 
   // Handle client certificate selection automatically
   app.on('select-client-certificate', (event, webContents, url, list, callback) => {

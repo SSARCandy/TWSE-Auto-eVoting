@@ -2,8 +2,10 @@
  * 登入自動化邏輯
  */
 
+const CONSTANTS = require('../constants');
+
 async function execute(webContents, nationalId, sendLog) {
-  const loginUrl = 'https://stockservices.tdcc.com.tw/evote/login/shareholder.html';
+  const loginUrl = CONSTANTS.URLS.LOGIN;
   
   sendLog('正在跳轉至登入頁面...');
   
