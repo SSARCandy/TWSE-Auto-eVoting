@@ -38,6 +38,10 @@ async function execute(webContents, nationalId, sendLog) {
     (async () => {
       function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
       
+      // 預防同步 alert 阻擋執行
+      window.alert = (msg) => { window.__lastAlertMsg = msg; window.__lastAlert = Date.now(); return true; };
+      window.confirm = (msg) => { window.__lastConfirmMsg = msg; window.__lastConfirm = Date.now(); return true; };
+      
       // 1. 選擇券商網路下單憑證
       const caTypeSelect = document.getElementById('caType');
       if (caTypeSelect) {
@@ -75,7 +79,8 @@ async function execute(webContents, nationalId, sendLog) {
       // 3. 點擊登入
       const loginBtn = document.getElementById('loginBtn');
       if (loginBtn) {
-        loginBtn.click();
+        // 使用 setTimeout 避免點擊觸發導航時卡住 executeJavaScript Promise
+        setTimeout(() => loginBtn.click(), 50);
         return true;
       } else {
         throw new Error('找不到登入按鈕 (預期 ID: loginBtn)');
@@ -90,30 +95,26 @@ async function execute(webContents, nationalId, sendLog) {
     // Wait for navigation or potential "Duplicate Login" dialog
     await new Promise(resolve => setTimeout(resolve, 3000));
 
-    // 4. Handle "Duplicate Login" popup if it appears
-    // Text: "本次為重複登入或前次未能正常登出..."
-    const handleDuplicateLogin = `
+    // 4. Handle any popup if it appears (e.g. "Duplicate Login", "No pending votes")
+    const handleLoginDialog = `
       (async () => {
         const delay = (ms) => new Promise(r => setTimeout(r, ms));
         
-        // 1. Force override window.alert and window.confirm just in case it's a native dialog
-        window.alert = () => { window.__lastAlert = Date.now(); return true; };
-        window.confirm = () => { window.__lastConfirm = Date.now(); return true; };
-
-        // Wait up to 3 seconds for potential modal/alert
         for (let i = 0; i < 6; i++) {
-          // Check if native dialog was triggered recently
           if (window.__lastAlert || window.__lastConfirm) {
-            return "NATIVE_DIALOG_CAPTURED";
+            const msg = window.__lastAlertMsg || window.__lastConfirmMsg || "NATIVE_DIALOG";
+            window.__lastAlert = null;
+            window.__lastConfirm = null;
+            return "NATIVE_DIALOG_CAPTURED: " + msg;
           }
 
-          const dialogText = "重複登入";
-          const hasDialog = Array.from(document.querySelectorAll('div, span, p, h1, h2, h3, h4, h5, h6, .modal-body, .swal2-title, .swal2-content'))
-            .some(el => el.innerText && el.innerText.includes(dialogText));
+          // Look for any visible modal or swal
+          const hasDialog = document.querySelector('.swal2-container.swal2-shown, .modal.show, .sweet-alert.visible') || 
+                            Array.from(document.querySelectorAll('div, span, p')).some(el => 
+                               el.innerText && (el.innerText.includes('重複登入') || el.innerText.includes('無待投票') || el.innerText.includes('無未投票') || el.innerText.includes('無可投票'))
+                            );
           
           if (hasDialog) {
-            // Find the "確認" OR "確定" OR "OK" button using multiple strategies
-            // Prioritize the specific ID provided by the user: #comfirmDialog_okBtn
             const specificBtn = document.getElementById('comfirmDialog_okBtn') || document.getElementById('confirmDialog_okBtn');
             if (specificBtn) {
               specificBtn.click();
@@ -137,18 +138,31 @@ async function execute(webContents, nationalId, sendLog) {
       })()
     `;
     
-    const result = await webContents.executeJavaScript(handleDuplicateLogin).catch((e) => "ERROR: " + e.message);
+    const result = await webContents.executeJavaScript(handleLoginDialog).catch((e) => "ERROR: " + e.message);
     if (result.startsWith("DOM_MODAL_CLICKED") || result === "NATIVE_DIALOG_CAPTURED") {
-      sendLog(`偵測到重複登入提示 (${result})，已自動點擊「確認」。`);
+      sendLog(`偵測到系統提示 (${result})，已自動點擊「確認」。`);
       await new Promise(resolve => setTimeout(resolve, 3000));
     } else if (result !== "NO_DIALOG_FOUND" && !result.startsWith("ERROR")) {
-      sendLog(`處理重複登入時發生異常: ${result}`, 'warning');
+      sendLog(`處理系統提示時發生異常: ${result}`, 'warning');
     }
     
-    const currentUrl = webContents.getURL();
+    let currentUrl = webContents.getURL();
+    for (let k = 0; k < 5; k++) {
+        if (!currentUrl.includes('login') || currentUrl.includes('index')) {
+            break;
+        }
+        await new Promise(r => setTimeout(r, 1000));
+        currentUrl = webContents.getURL();
+    }
+    
     if (currentUrl.includes('login') && !currentUrl.includes('index')) {
-        // Still on login page, might have failed
-        return false;
+        sendLog(`[Debug] 登入後未自動跳轉 (URL: ${currentUrl})，嘗試手動導航至首頁...`, 'warning');
+        await webContents.loadURL(CONSTANTS.URLS.INDEX);
+        await new Promise(r => setTimeout(r, 3000));
+        currentUrl = webContents.getURL();
+        if (currentUrl.includes('login') && !currentUrl.includes('index')) {
+            return false;
+        }
     }
     
     return true;

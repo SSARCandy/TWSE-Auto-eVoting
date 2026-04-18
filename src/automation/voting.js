@@ -7,40 +7,88 @@ async function delay(ms) {
 }
 
 async function getCompanyList(webContents, sendLog) {
-  const listScript = `
-    (() => {
-      // 尋找包含公司列表的表格行
-      const rows = Array.from(document.querySelectorAll('tr')).filter(row => {
-          const text = row.innerText;
-          // 必須包含 "未投票" 且有 "投票" 連結
-          return text.includes('未投票') && Array.from(row.querySelectorAll('a.c-actLink')).some(a => a.innerText.includes('投票'));
-      });
+  let allCompaniesMap = new Map();
+  let hasNextPage = true;
+  let pageNum = 1;
 
-      return rows.map(row => {
-          const cells = row.querySelectorAll('td');
-          if (cells.length < 1) return null;
-          
-          // 第一欄通常是 "證券代號公司簡稱"，例如 "8033 雷虎"
-          const companyInfo = cells[0].innerText.trim().split(/\\s+/);
-          const code = companyInfo[0];
-          const name = companyInfo.length > 1 ? companyInfo.slice(1).join(' ') : '未知公司';
-          
-          return {
-              code: code,
-              name: name,
-              rowIndex: Array.from(row.parentNode.children).indexOf(row)
-          };
-      }).filter(c => c !== null);
-    })()
-  `;
+  while (hasNextPage) {
+    sendLog(`正在抓取第 ${pageNum} 頁公司清單...`);
+    const pageData = await webContents.executeJavaScript(`
+      (() => {
+        // 尋找包含公司列表的表格行
+        const rows = Array.from(document.querySelectorAll('tr')).filter(row => {
+            return Array.from(row.querySelectorAll('a.c-actLink, a.u-link')).some(a => 
+                a.innerText.includes('投票') || a.innerText.includes('查詢') || a.innerText.includes('Check') || a.innerText.includes('Vote')
+            );
+        });
 
-  try {
-    const list = await webContents.executeJavaScript(listScript);
-    return list || [];
-  } catch (err) {
-    sendLog('抓取公司清單錯誤: ' + err.message, 'error');
-    return [];
+        const list = rows.map(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells.length < 1) return null;
+            
+            // 第一欄通常是 "證券代號公司簡稱"
+            const companyInfo = cells[0].innerText.trim().split(/\\s+/);
+            const code = companyInfo[0];
+            const name = companyInfo.length > 1 ? companyInfo.slice(1).join(' ') : '未知公司';
+            
+            const links = Array.from(row.querySelectorAll('a.c-actLink, a.u-link'));
+            const hasVote = links.some(a => a.innerText.includes('投票') || a.innerText.includes('Vote'));
+            const status = hasVote ? 'pending' : 'voted';
+            
+            return {
+                code: code,
+                name: name,
+                status: status,
+                rowIndex: Array.from(row.parentNode.children).indexOf(row)
+            };
+        }).filter(c => c !== null);
+
+        // 尋找下一頁按鈕
+        let clickedNext = false;
+        const validNextBtns = Array.from(document.querySelectorAll('a')).filter(a => {
+            const img = a.querySelector('img');
+            return (img && img.alt === '下一頁') || a.innerText.includes('下一頁');
+        });
+        
+        // 過濾掉看起來像是 disabled 的按鈕 (例如包含某些特定 class)
+        // 或者是因為有兩個 "下一頁" icon，其中一個是真正的翻頁，另一可能是灰色的
+        for (let btn of validNextBtns) {
+            const img = btn.querySelector('img');
+            // 如果同時存在 icon_001 和 icon_002，icon_001 通常是 active
+            if (img && img.src.includes('011')) continue; // 可能是 disabled 下一頁
+            
+            btn.click();
+            clickedNext = true;
+            break;
+        }
+
+        return { list: list, hasNext: clickedNext };
+      })()
+    `);
+
+    let addedCount = 0;
+    if (pageData && pageData.list) {
+        for (const comp of pageData.list) {
+            if (!allCompaniesMap.has(comp.code)) {
+                allCompaniesMap.set(comp.code, comp);
+                addedCount++;
+            }
+        }
+    }
+
+    // 防呆機制：如果這一頁沒有增加任何新公司，代表已經到底了（或是翻頁失效），終止迴圈
+    if (addedCount === 0) {
+        break;
+    }
+
+    hasNextPage = pageData.hasNext;
+    if (hasNextPage) {
+        pageNum++;
+        await new Promise(r => setTimeout(r, 2500)); // 等待下一頁載入
+    }
   }
+
+  return Array.from(allCompaniesMap.values());
 }
 
 async function voteForCompany(webContents, company, preference, sendLog, skipClick = false) {
