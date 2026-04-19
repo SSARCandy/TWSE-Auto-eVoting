@@ -67,14 +67,12 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Delete old Nightly Release
-        uses: dev-drprasad/delete-tag-and-release@v1.1
-        with:
-          delete_release: true
-          tag_name: nightly
+      - name: Delete old Nightly Release and Tag
+        run: |
+          gh release delete nightly --cleanup-tag -y || true
+          git push --delete origin nightly || true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Nightly Release
         uses: softprops/action-gh-release@v2
