@@ -1,6 +1,7 @@
 /**
  * 登出自動化邏輯
  */
+const { randomDelay, waitForNavigation } = require('./utils');
 
 async function execute(webContents, sendLog) {
   sendLog('[登出] 正在執行登出程序...');
@@ -73,10 +74,11 @@ async function execute(webContents, sendLog) {
   
   if (result === "SYS_MSG_CLICKED") {
     sendLog('[登出] 完成登出程序。');
-    await new Promise(r => setTimeout(r, 2000));
+    await waitForNavigation(webContents, 3000);
+    await randomDelay(300, 500);
   } else if (result === "LOGOUT_INITIATED" || (typeof result === 'string' && result.includes("ERROR:"))) {
     sendLog('[登出] 已觸發登出指令，等待跳轉...');
-    await new Promise(r => setTimeout(r, 4000));
+    await waitForNavigation(webContents, 5000);
     
     // 跳轉後補刀
     const checkFinalScript = `
@@ -92,7 +94,8 @@ async function execute(webContents, sendLog) {
     const isFinalClicked = await safeExecute(checkFinalScript, 2000);
     if (isFinalClicked === true) {
       sendLog('[登出] 確認登出完成。');
-      await new Promise(r => setTimeout(r, 2000));
+      await waitForNavigation(webContents, 3000);
+      await randomDelay(200, 400);
     }
   } else if (result === "NOT_FOUND") {
     sendLog('[系統] 找不到登出按鈕，可能已經登出。', 'info');

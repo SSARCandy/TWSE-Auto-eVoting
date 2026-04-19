@@ -1,4 +1,4 @@
-const { session, app } = require('electron');
+const { app } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -19,11 +19,11 @@ const { randomDelay, waitForNavigation } = require('./utils');
 function isScreenshotExists(nationalId, code, outputDir, folderStructure = 'by_id') {
   const baseDir = outputDir || path.join(app.getPath('documents'), '投票證明');
   const dir = folderStructure === 'flat' ? baseDir : path.join(baseDir, nationalId);
-    
+
   if (!fs.existsSync(dir)) return false;
 
   const filename = `${nationalId}_${code}.png`;
-    
+
   return fs.existsSync(path.join(dir, filename));
 }
 
@@ -66,7 +66,7 @@ async function navigateBackToList(webContents, sendLog) {
             return false;
         })()
     `;
-    
+
   const waitP = waitForNavigation(webContents, 15000);
   try {
     const clickedBack = await webContents.executeJavaScript(returnListScript);
@@ -78,7 +78,7 @@ async function navigateBackToList(webContents, sendLog) {
     sendLog(`[導航] 執行返回腳本失敗: ${e.message}，嘗試 goBack...`);
     webContents.goBack();
   }
-    
+
   await waitP;
   await randomDelay(300, 600);
 }
@@ -100,9 +100,9 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
 
     const id = ids[i];
     const maskedId = id.substring(0, 4) + '****' + id.substring(8);
-        
+
     sendLog(`[系統] 開始處理身分證: ${maskedId}`);
-    sendProgress({ 
+    sendProgress({
       id: { current: i, total: ids.length },
       vote: { current: 0, total: 0 },
       screenshot: { current: 0, total: 0 }
@@ -121,13 +121,13 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
 
       sendLog('[清單] 正在抓取公司清單...');
       const companies = await voting.getCompanyList(webContents, sendLog);
-            
+
       const pendingCodes = companies.filter(c => c.status === 'pending').map(c => c.code);
       const votedCodes = companies.filter(c => c.status === 'voted').map(c => c.code);
       const votedNeedScreenshot = votedCodes.filter(code => !isScreenshotExists(id, code, outputDir, folderStructure));
-            
+
       const targetCodes = [...pendingCodes, ...votedNeedScreenshot];
-            
+
       let totalVotes = pendingCodes.length;
       let currentVote = 0;
       let totalShots = targetCodes.length;
@@ -135,12 +135,12 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
 
       sendLog(`[清單] 找到 ${totalVotes} 家需投票，${votedNeedScreenshot.length} 家需補截圖。共需處理 ${totalShots} 家。`);
 
-      sendProgress({ 
+      sendProgress({
         id: { current: i + 1, total: ids.length },
         vote: { current: currentVote, total: totalVotes },
         screenshot: { current: currentShot, total: totalShots }
       });
-            
+
       for (let j = 0; j < targetCodes.length; j++) {
         if (isStopRequested()) break;
 
@@ -150,7 +150,7 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
           sendLog(`[清單] 股號 ${code} 已有截圖存檔，跳過。`);
           if (pendingCodes.includes(code)) currentVote++;
           currentShot++;
-          sendProgress({ 
+          sendProgress({
             id: { current: i + 1, total: ids.length },
             vote: { current: currentVote, total: totalVotes },
             screenshot: { current: currentShot, total: totalShots }
@@ -159,22 +159,22 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
         }
 
         sendLog(`[導航] 搜尋股號: ${code} ...`);
-                
+
         try {
           const navResult = await voting.searchAndNavigate(webContents, code, sendLog);
-                    
+
           if (navResult.type === 'vote') {
             sendLog(`[投票] 偵測到未投票，開始執行投票程序...`);
             await voting.voteForCompany(webContents, { code, name: '查詢中', rowIndex: 0 }, sendLog, true);
             sendLog(`[投票] ${code} 投票成功。`);
-                        
+
             currentVote++;
-            sendProgress({ 
+            sendProgress({
               id: { current: i + 1, total: ids.length },
               vote: { current: currentVote, total: totalVotes },
               screenshot: { current: currentShot, total: totalShots }
             });
-                        
+
             sendLog('[導航] 準備返回查詢頁面...');
             const waitGo = waitForNavigation(webContents);
             const clickedGo = await webContents.executeJavaScript(`(() => { const btn = document.getElementById('go'); if(btn){ btn.click(); return true; } return false; })()`);
@@ -184,7 +184,7 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
             }
             await waitGo;
             await randomDelay(200, 500);
-                        
+
             sendLog(`[截圖] 準備查詢 ${code} 以進行截圖...`);
             const waitQry = waitForNavigation(webContents);
             const clickedQry = await webContents.executeJavaScript(`(() => { const link = document.querySelector('a[onclick*="\\'${code}\\',\\'qry\\'"]'); if(link){ link.click(); return true; } return false; })()`);
@@ -196,20 +196,20 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
             if (pendingCodes.includes(code)) {
               // If it was marked as pending but actually voted (edge case check)
               currentVote++;
-              sendProgress({ 
+              sendProgress({
                 id: { current: i + 1, total: ids.length },
                 vote: { current: currentVote, total: totalVotes },
                 screenshot: { current: currentShot, total: totalShots }
               });
             }
           }
-                    
+
           sendLog(`[截圖] 正在擷取 ${code} 投票證明...`);
           const screenshotPath = await screenshot.execute(webContents, id, { code, name: '股東會' }, outputDir, folderStructure);
           sendLog(`[截圖] 證明已儲存: ${path.basename(screenshotPath)}`);
 
           currentShot++;
-          sendProgress({ 
+          sendProgress({
             id: { current: i + 1, total: ids.length },
             vote: { current: currentVote, total: totalVotes },
             screenshot: { current: currentShot, total: totalShots }
@@ -223,10 +223,10 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
           await navigateBackToList(webContents, sendLog);
         }
       }
-            
+
       await logout.execute(webContents, sendLog);
       await randomDelay(800, 1500);
-            
+
       sendLog('[導航] 返回初始登入頁面...');
       const waitLogin = waitForNavigation(webContents);
       webContents.loadURL(CONSTANTS.URLS.LOGIN);
