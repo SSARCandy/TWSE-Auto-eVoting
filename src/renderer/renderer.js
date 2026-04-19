@@ -9,8 +9,9 @@ const logContainer = document.getElementById('log-container');
 const clearLogBtn = document.getElementById('clear-log');
 const outputDirInput = document.getElementById('output-dir');
 const browseBtn = document.getElementById('browse-btn');
+const folderStructureSelect = document.getElementById('folder-structure');
 
-let currentConfig = { outputDir: '', ids: '' };
+let currentConfig = { outputDir: '', ids: '', folderStructure: 'by_id' };
 
 async function init() {
     currentConfig = await window.electronAPI.getConfig();
@@ -19,6 +20,9 @@ async function init() {
     }
     if (currentConfig.ids) {
         idsInput.value = currentConfig.ids;
+    }
+    if (currentConfig.folderStructure) {
+        folderStructureSelect.value = currentConfig.folderStructure;
     }
 }
 
@@ -29,12 +33,14 @@ function debouncedSave() {
     clearTimeout(saveTimeout);
     saveTimeout = setTimeout(async () => {
         currentConfig.ids = idsInput.value;
+        currentConfig.folderStructure = folderStructureSelect.value;
         const cleanConfig = JSON.parse(JSON.stringify(currentConfig));
         await window.electronAPI.saveConfig(cleanConfig);
     }, 1000);
 }
 
 idsInput.addEventListener('input', debouncedSave);
+folderStructureSelect.addEventListener('change', debouncedSave);
 
 browseBtn.addEventListener('click', async () => {
     const selectedDir = await window.electronAPI.selectDirectory();
@@ -91,8 +97,9 @@ startBtn.addEventListener('click', async () => {
     try {
         const sanitizedIds = JSON.parse(JSON.stringify(ids));
         const outputDir = outputDirInput.value || '';
+        const folderStructure = folderStructureSelect.value;
 
-        const result = await window.electronAPI.startVoting(sanitizedIds, outputDir);
+        const result = await window.electronAPI.startVoting(sanitizedIds, outputDir, folderStructure);
         if (result.success) {
             addLog('任務執行完畢', 'info');
         } else {

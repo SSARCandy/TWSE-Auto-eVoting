@@ -15,9 +15,9 @@ const CONSTANTS = require('../constants');
  * @param {string} outputDir - The base output directory.
  * @returns {boolean} True if the screenshot exists, false otherwise.
  */
-function isScreenshotExists(nationalId, code, outputDir) {
+function isScreenshotExists(nationalId, code, outputDir, folderStructure = 'by_id') {
     const baseDir = outputDir || path.join(app.getPath('documents'), '投票證明');
-    const dir = path.join(baseDir, nationalId);
+    const dir = folderStructure === 'flat' ? baseDir : path.join(baseDir, nationalId);
     
     if (!fs.existsSync(dir)) return false;
 
@@ -83,7 +83,7 @@ async function navigateBackToList(webContents, sendLog) {
 /**
  * Main execution flow for the automation process.
  */
-async function run(webContents, ids, sendLog, sendProgress, isStopRequested, outputDir) {
+async function run(webContents, ids, sendLog, sendProgress, isStopRequested, outputDir, folderStructure = 'by_id') {
     if (isMaintenanceTime()) {
         sendLog('[系統] 目前為系統維護時間 (00:00~07:00)，停止自動作業。', 'error');
         return;
@@ -121,7 +121,7 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
             
             const pendingCodes = companies.filter(c => c.status === 'pending').map(c => c.code);
             const votedCodes = companies.filter(c => c.status === 'voted').map(c => c.code);
-            const votedNeedScreenshot = votedCodes.filter(code => !isScreenshotExists(id, code, outputDir));
+            const votedNeedScreenshot = votedCodes.filter(code => !isScreenshotExists(id, code, outputDir, folderStructure));
             
             const targetCodes = [...pendingCodes, ...votedNeedScreenshot];
             
@@ -143,7 +143,7 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
 
                 const code = targetCodes[j];
 
-                if (isScreenshotExists(id, code, outputDir)) {
+                if (isScreenshotExists(id, code, outputDir, folderStructure)) {
                     sendLog(`[清單] 股號 ${code} 已有截圖存檔，跳過。`);
                     if (pendingCodes.includes(code)) currentVote++;
                     currentShot++;
@@ -199,7 +199,7 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
                     }
                     
                     sendLog(`[截圖] 正在擷取 ${code} 投票證明...`);
-                    const screenshotPath = await screenshot.execute(webContents, id, { code, name: '股東會' }, outputDir);
+                    const screenshotPath = await screenshot.execute(webContents, id, { code, name: '股東會' }, outputDir, folderStructure);
                     sendLog(`[截圖] 證明已儲存: ${path.basename(screenshotPath)}`);
 
                     currentShot++;

@@ -9,14 +9,16 @@ let stopRequested = false;
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
 
 function getConfig() {
+  const defaultConfig = { outputDir: '', ids: '', folderStructure: 'by_id' };
   try {
     if (fs.existsSync(CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+      const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+      return { ...defaultConfig, ...config };
     }
   } catch (err) {
     console.error('Failed to read config:', err);
   }
-  return { outputDir: '', ids: '' };
+  return defaultConfig;
 }
 
 function saveConfig(config) {
@@ -219,7 +221,7 @@ app.on('window-all-closed', function () {
 });
 
 // IPC Handlers
-ipcMain.handle('start-voting', async (event, { ids, outputDir }) => {
+ipcMain.handle('start-voting', async (event, { ids, outputDir, folderStructure }) => {
   stopRequested = false;
   const automation = require('./src/automation/main_flow');
   try {
@@ -232,7 +234,7 @@ ipcMain.handle('start-voting', async (event, { ids, outputDir }) => {
         const sanitizedProgress = JSON.parse(JSON.stringify(progress));
         mainWindow.webContents.send('progress', sanitizedProgress);
       }
-    }, () => stopRequested, outputDir);
+    }, () => stopRequested, outputDir, folderStructure);
     return JSON.parse(JSON.stringify({ success: true }));
   } catch (error) {
     console.error('Automation error:', error);

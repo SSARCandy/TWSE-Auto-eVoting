@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  startVoting: (ids, outputDir) => ipcRenderer.invoke('start-voting', { ids, outputDir }),
+  startVoting: (ids, outputDir, folderStructure) => ipcRenderer.invoke('start-voting', { ids, outputDir, folderStructure }),
   stopVoting: () => ipcRenderer.invoke('stop-voting'),
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   getConfig: () => ipcRenderer.invoke('get-config'),

@@ -10,9 +10,9 @@ const { app } = require('electron');
  * @param {string} outputDir - The base output directory.
  * @returns {string} The absolute path to the saved screenshot.
  */
-async function execute(webContents, nationalId, company, outputDir) {
+async function execute(webContents, nationalId, company, outputDir, folderStructure = 'by_id') {
   const baseDir = outputDir || path.join(app.getPath('documents'), '投票證明');
-  const dir = path.join(baseDir, nationalId);
+  const dir = folderStructure === 'flat' ? baseDir : path.join(baseDir, nationalId);
   
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
