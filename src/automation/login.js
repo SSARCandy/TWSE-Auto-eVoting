@@ -3,6 +3,7 @@
  */
 
 const CONSTANTS = require('../constants');
+const { waitForNavigation } = require('./utils');
 
 async function execute(webContents, nationalId, sendLog) {
   sendLog('[登入] 正在跳轉至登入頁面...');
@@ -56,7 +57,7 @@ async function execute(webContents, nationalId, sendLog) {
         caTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
         if (typeof window.caTypeChange === 'function') window.caTypeChange();
       }
-      await delay(800);
+      await delay(Math.floor(Math.random() * 400) + 400);
 
       // 2. 填入身分證字號 / 統編
       const idInput = document.querySelector('input[placeholder*="身分證"]') || 
@@ -71,11 +72,11 @@ async function execute(webContents, nationalId, sendLog) {
       }
 
       idInput.focus();
-      await delay(200);
+      await delay(Math.floor(Math.random() * 100) + 100);
       idInput.value = '${nationalId}';
       ['input', 'change', 'blur'].forEach(evt => idInput.dispatchEvent(new Event(evt, { bubbles: true })));
       
-      await delay(800);
+      await delay(Math.floor(Math.random() * 400) + 400);
 
       // 3. 點擊登入
       const loginBtn = document.getElementById('loginBtn');
@@ -99,8 +100,8 @@ async function execute(webContents, nationalId, sendLog) {
       sendLog('[警告] 填寫資訊時發生非預期狀況。', 'warning');
     }
 
-    // Wait for navigation or potential "Duplicate Login" dialog
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Wait for navigation or potential "Duplicate Login" dialog. It resolves instantly if navigation finishes.
+    await waitForNavigation(webContents, 3000);
 
     // 4. Handle any popup if it appears (e.g. "Duplicate Login", "No pending votes")
     const handleLoginDialog = `
@@ -149,7 +150,7 @@ async function execute(webContents, nationalId, sendLog) {
     
     if (resultStr.startsWith("DOM_MODAL_CLICKED") || resultStr.startsWith("NATIVE_DIALOG_CAPTURED")) {
       sendLog('[登入] 偵測到系統提示，已自動點選確認。');
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await waitForNavigation(webContents, 3000);
     } else if (resultStr !== "NO_DIALOG_FOUND" && !resultStr.startsWith("ERROR: TIMEOUT") && !resultStr.includes('destroyed')) {
       sendLog('[警告] 處理系統提示時發生異常。', 'warning');
     }

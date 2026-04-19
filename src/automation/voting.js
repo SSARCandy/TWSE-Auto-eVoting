@@ -1,6 +1,7 @@
 /**
  * 投票自動化邏輯
  */
+const { randomDelay, waitForNavigation } = require('./utils');
 
 async function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -80,7 +81,8 @@ async function getCompanyList(webContents, sendLog) {
     hasNextPage = pageData.hasNext;
     if (hasNextPage) {
       pageNum++;
-      await delay(1500); // 縮短翻頁等待時間，依賴下一次抓取的重試或確保頁面載入
+      await waitForNavigation(webContents, 6000);
+      await randomDelay(300, 600);
     }
   }
 
@@ -94,6 +96,7 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
   if (!skipClick) {
     sendLog(`[投票] 正在點擊 ${company.name} (${company.code}) 的投票按鈕...`);
 
+    const waitClick = waitForNavigation(webContents);
     const clickResult = await webContents.executeJavaScript(`
       (() => {
           const row = document.querySelectorAll('tr')[${company.rowIndex}];
@@ -111,7 +114,8 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
       throw new Error('無法找到或點擊投票按鈕');
     }
 
-    await delay(2000);
+    await waitClick;
+    await randomDelay(300, 600);
   }
 
   sendLog(`[投票] 進入投票頁面，正在執行自動投票程序...`);
@@ -194,6 +198,7 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
       })()
     `;
 
+    const waitNext = waitForNavigation(webContents, 10000);
     const result = await webContents.executeJavaScript(pageScript);
     
     if (!result.success) {
@@ -202,18 +207,19 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
 
     if (result.type === 'submit') {
       sendLog('[投票] 偵測到確認頁面，已點擊送出。');
+      await waitNext;
+      await randomDelay(300, 600);
       break; // 投票迴圈結束
     }
     
     sendLog('[投票] 已完成本頁投票，點擊下一步...');
-    await delay(2000); // 縮短等待下一頁載入時間
+    await waitNext;
+    await randomDelay(300, 600);
   }
 
   if (pageCount >= maxPages) {
     throw new Error(`超過最大頁數限制 (${maxPages})，可能發生無窮迴圈。`);
   }
-
-  await delay(2000);
 
   const finalCheck = await webContents.executeJavaScript(`
     (() => {
@@ -260,8 +266,9 @@ async function searchAndNavigate(webContents, stockCode, sendLog) {
     if (!result.success) throw new Error(result.reason);
     
     // Polling for search results (Max ~10s)
-    for (let i = 0; i < 10; i++) {
-      await delay(1000);
+    for (let i = 0; i < 20; i++) {
+      await delay(500); // 縮短搜尋結果等待的 polling 時間
+      const waitSearchNav = waitForNavigation(webContents, 8000);
       const linkResult = await webContents.executeJavaScript(`
             (() => {
                 const rows = Array.from(document.querySelectorAll('tr')).filter(row => row.innerText.includes('${stockCode}'));
@@ -281,7 +288,8 @@ async function searchAndNavigate(webContents, stockCode, sendLog) {
         `);
         
       if (linkResult && linkResult.found) {
-        await delay(2000); // Wait for navigation after click
+        await waitSearchNav;
+        await randomDelay(300, 600);
         return { success: true, type: linkResult.type };
       }
     }

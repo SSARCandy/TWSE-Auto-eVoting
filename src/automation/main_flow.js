@@ -7,6 +7,7 @@ const voting = require('./voting');
 const screenshot = require('./screenshot');
 const logout = require('./logout');
 const CONSTANTS = require('../constants');
+const { randomDelay, waitForNavigation } = require('./utils');
 
 /**
  * Checks if a screenshot for the given company and national ID already exists.
@@ -66,18 +67,20 @@ async function navigateBackToList(webContents, sendLog) {
         })()
     `;
     
+  const waitP = waitForNavigation(webContents, 15000);
   try {
     const clickedBack = await webContents.executeJavaScript(returnListScript);
     if (!clickedBack) {
       sendLog('[導航] 找不到回列表按鈕，嘗試使用回上一頁...');
-      await webContents.goBack();
+      webContents.goBack();
     }
   } catch (e) {
     sendLog(`[導航] 執行返回腳本失敗: ${e.message}，嘗試 goBack...`);
-    await webContents.goBack();
+    webContents.goBack();
   }
     
-  await new Promise(r => setTimeout(r, 2000));
+  await waitP;
+  await randomDelay(300, 600);
 }
 
 /**
@@ -173,18 +176,21 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
             });
                         
             sendLog('[導航] 準備返回查詢頁面...');
+            const waitGo = waitForNavigation(webContents);
             const clickedGo = await webContents.executeJavaScript(`(() => { const btn = document.getElementById('go'); if(btn){ btn.click(); return true; } return false; })()`);
             if (!clickedGo) {
               sendLog('[導航] 找不到確認按鈕，嘗試回上頁');
-              await webContents.goBack();
+              webContents.goBack();
             }
-            await new Promise(r => setTimeout(r, 2000));
+            await waitGo;
+            await randomDelay(200, 500);
                         
             sendLog(`[截圖] 準備查詢 ${code} 以進行截圖...`);
+            const waitQry = waitForNavigation(webContents);
             const clickedQry = await webContents.executeJavaScript(`(() => { const link = document.querySelector('a[onclick*="\\'${code}\\',\\'qry\\'"]'); if(link){ link.click(); return true; } return false; })()`);
             if (!clickedQry) throw new Error(`找不到股號 ${code} 的查詢連結`);
-                        
-            await new Promise(r => setTimeout(r, 2000));
+            await waitQry;
+            await randomDelay(300, 700);
           } else {
             sendLog(`[導航] 偵測到已投過，已在查詢頁面...`);
             if (pendingCodes.includes(code)) {
@@ -219,11 +225,13 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
       }
             
       await logout.execute(webContents, sendLog);
-      await new Promise(r => setTimeout(r, 1500));
+      await randomDelay(800, 1500);
             
       sendLog('[導航] 返回初始登入頁面...');
-      await webContents.loadURL(CONSTANTS.URLS.LOGIN);
-      await new Promise(r => setTimeout(r, 1000));
+      const waitLogin = waitForNavigation(webContents);
+      webContents.loadURL(CONSTANTS.URLS.LOGIN);
+      await waitLogin;
+      await randomDelay(200, 500);
 
       sendLog(`[系統] ${maskedId} 處理流程結束。`, 'info');
 
