@@ -96,7 +96,7 @@ async function execute(webContents, nationalId, sendLog) {
     const success = await safeExecute(loginScript, 4000);
     // If it returns ERROR: TIMEOUT or ERROR: context destroyed, it means navigation started or alert popped up.
     if (typeof success === 'string' && success.includes('ERROR:') && !success.includes('TIMEOUT') && !success.includes('destroyed')) {
-        sendLog('[警告] 填寫資訊時發生非預期狀況。', 'warning');
+      sendLog('[警告] 填寫資訊時發生非預期狀況。', 'warning');
     }
 
     // Wait for navigation or potential "Duplicate Login" dialog
@@ -156,22 +156,22 @@ async function execute(webContents, nationalId, sendLog) {
     
     let currentUrl = webContents.getURL();
     for (let k = 0; k < 5; k++) {
-        if (!currentUrl.includes('login') || currentUrl.includes('index')) {
-            break;
-        }
-        await new Promise(r => setTimeout(r, 1000));
-        currentUrl = webContents.getURL();
+      if (!currentUrl.includes('login') || currentUrl.includes('index')) {
+        break;
+      }
+      await new Promise(r => setTimeout(r, 1000));
+      currentUrl = webContents.getURL();
     }
     
     if (currentUrl.includes('login') && !currentUrl.includes('index')) {
-        sendLog('[警告] 登入後未自動跳轉，嘗試手動導航...', 'warning');
-        await webContents.loadURL(CONSTANTS.URLS.INDEX);
-        await new Promise(r => setTimeout(r, 3000));
-        currentUrl = webContents.getURL();
+      sendLog('[警告] 登入後未自動跳轉，嘗試手動導航...', 'warning');
+      await webContents.loadURL(CONSTANTS.URLS.INDEX);
+      await new Promise(r => setTimeout(r, 3000));
+      currentUrl = webContents.getURL();
         
-        if (currentUrl.includes('login') && !currentUrl.includes('index')) {
-            return false;
-        }
+      if (currentUrl.includes('login') && !currentUrl.includes('index')) {
+        return false;
+      }
     }
     
     return true;

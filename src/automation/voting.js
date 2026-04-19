@@ -65,22 +65,22 @@ async function getCompanyList(webContents, sendLog) {
 
     let addedCount = 0;
     if (pageData && pageData.list) {
-        for (const comp of pageData.list) {
-            if (!allCompaniesMap.has(comp.code)) {
-                allCompaniesMap.set(comp.code, comp);
-                addedCount++;
-            }
+      for (const comp of pageData.list) {
+        if (!allCompaniesMap.has(comp.code)) {
+          allCompaniesMap.set(comp.code, comp);
+          addedCount++;
         }
+      }
     }
 
     if (addedCount === 0) {
-        break;
+      break;
     }
 
     hasNextPage = pageData.hasNext;
     if (hasNextPage) {
-        pageNum++;
-        await delay(1500); // 縮短翻頁等待時間，依賴下一次抓取的重試或確保頁面載入
+      pageNum++;
+      await delay(1500); // 縮短翻頁等待時間，依賴下一次抓取的重試或確保頁面載入
     }
   }
 
@@ -261,8 +261,8 @@ async function searchAndNavigate(webContents, stockCode, sendLog) {
     
     // Polling for search results (Max ~10s)
     for (let i = 0; i < 10; i++) {
-        await delay(1000);
-        const linkResult = await webContents.executeJavaScript(`
+      await delay(1000);
+      const linkResult = await webContents.executeJavaScript(`
             (() => {
                 const rows = Array.from(document.querySelectorAll('tr')).filter(row => row.innerText.includes('${stockCode}'));
                 if (rows.length === 0) return null;
@@ -280,10 +280,10 @@ async function searchAndNavigate(webContents, stockCode, sendLog) {
             })()
         `);
         
-        if (linkResult && linkResult.found) {
-            await delay(2000); // Wait for navigation after click
-            return { success: true, type: linkResult.type };
-        }
+      if (linkResult && linkResult.found) {
+        await delay(2000); // Wait for navigation after click
+        return { success: true, type: linkResult.type };
+      }
     }
 
     throw new Error('搜尋結果逾時或未找到連結');

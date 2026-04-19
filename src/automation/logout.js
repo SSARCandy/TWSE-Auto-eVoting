@@ -91,8 +91,8 @@ async function execute(webContents, sendLog) {
     `;
     const isFinalClicked = await safeExecute(checkFinalScript, 2000);
     if (isFinalClicked === true) {
-        sendLog('[登出] 確認登出完成。');
-        await new Promise(r => setTimeout(r, 2000));
+      sendLog('[登出] 確認登出完成。');
+      await new Promise(r => setTimeout(r, 2000));
     }
   } else if (result === "NOT_FOUND") {
     sendLog('[系統] 找不到登出按鈕，可能已經登出。', 'info');
