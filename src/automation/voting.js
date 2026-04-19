@@ -1,11 +1,7 @@
 /**
  * Voting automation logic
  */
-const { randomDelay, waitForNavigation } = require('./utils');
-
-async function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+const { delay, randomDelay, waitForNavigation } = require('./utils');
 
 /**
  * Grabs the list of companies from the current table.
@@ -74,9 +70,7 @@ async function getCompanyList(webContents, sendLog) {
       }
     }
 
-    if (addedCount === 0) {
-      break;
-    }
+    if (addedCount === 0) break;
 
     hasNextPage = pageData.hasNext;
     if (hasNextPage) {
@@ -110,9 +104,7 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
       })()
     `);
 
-    if (!clickResult) {
-      throw new Error('無法找到或點擊投票按鈕');
-    }
+    if (!clickResult) throw new Error('無法找到或點擊投票按鈕');
 
     await waitClick;
     await randomDelay(300, 600);
@@ -201,9 +193,7 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
     const waitNext = waitForNavigation(webContents, 10000);
     const result = await webContents.executeJavaScript(pageScript);
     
-    if (!result.success) {
-      throw new Error(result.reason || '頁面處理失敗');
-    }
+    if (!result.success) throw new Error(result.reason || '頁面處理失敗');
 
     if (result.type === 'submit') {
       sendLog('[投票] 偵測到確認頁面，已點擊送出。');
@@ -301,4 +291,8 @@ async function searchAndNavigate(webContents, stockCode, sendLog) {
   }
 }
 
-module.exports = { getCompanyList, voteForCompany, searchAndNavigate };
+module.exports = {
+  getCompanyList,
+  voteForCompany,
+  searchAndNavigate,
+};

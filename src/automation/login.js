@@ -3,7 +3,7 @@
  */
 
 const CONSTANTS = require('../constants');
-const { waitForNavigation } = require('./utils');
+const { waitForNavigation, safeExecute, delay } = require('./utils');
 
 async function execute(webContents, nationalId, sendLog) {
   sendLog('[登入] 正在跳轉至登入頁面...');
@@ -15,26 +15,18 @@ async function execute(webContents, nationalId, sendLog) {
     return false;
   }
   
-  const safeExecute = async (script, timeoutMs = 3000) => {
-    try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs));
-      const execPromise = webContents.executeJavaScript(script);
-      return await Promise.race([execPromise, timeoutPromise]);
-    } catch (err) {
-      return "ERROR: " + err.message;
-    }
-  };
-
   // Faster proactive check for existence of key element
-  const ready = await safeExecute(`
+  const readyScript = `
     (async () => {
+      const delay = (ms) => new Promise(r => setTimeout(r, ms));
       for (let i = 0; i < 20; i++) { // Max 10s total
         if (document.getElementById('caType') || document.getElementById('pageIdNo')) return true;
-        await new Promise(r => setTimeout(r, 500));
+        await delay(500);
       }
       return false;
     })()
-  `, 12000);
+  `;
+  const ready = await safeExecute(webContents, readyScript, 12000);
 
   if (ready !== true) {
     sendLog('[警告] 登入頁面載入較慢，請稍候...', 'warning');
@@ -94,7 +86,8 @@ async function execute(webContents, nationalId, sendLog) {
   `;
 
   try {
-    const success = await safeExecute(loginScript, 4000);
+    const success = await safeExecute(webContents, loginScript, 4000);
+    
     // If it returns ERROR: TIMEOUT or ERROR: context destroyed, it means navigation started or alert popped up.
     if (typeof success === 'string' && success.includes('ERROR:') && !success.includes('TIMEOUT') && !success.includes('destroyed')) {
       sendLog('[警告] 填寫資訊時發生非預期狀況。', 'warning');
@@ -145,7 +138,7 @@ async function execute(webContents, nationalId, sendLog) {
       })()
     `;
     
-    const result = await safeExecute(handleLoginDialog, 4000);
+    const result = await safeExecute(webContents, handleLoginDialog, 4000);
     const resultStr = String(result);
     
     if (resultStr.startsWith("DOM_MODAL_CLICKED") || resultStr.startsWith("NATIVE_DIALOG_CAPTURED")) {
@@ -157,17 +150,15 @@ async function execute(webContents, nationalId, sendLog) {
     
     let currentUrl = webContents.getURL();
     for (let k = 0; k < 5; k++) {
-      if (!currentUrl.includes('login') || currentUrl.includes('index')) {
-        break;
-      }
-      await new Promise(r => setTimeout(r, 1000));
+      if (!currentUrl.includes('login') || currentUrl.includes('index')) break;
+      await delay(1000);
       currentUrl = webContents.getURL();
     }
     
     if (currentUrl.includes('login') && !currentUrl.includes('index')) {
       sendLog('[警告] 登入後未自動跳轉，嘗試手動導航...', 'warning');
       await webContents.loadURL(CONSTANTS.URLS.INDEX);
-      await new Promise(r => setTimeout(r, 3000));
+      await delay(3000);
       currentUrl = webContents.getURL();
         
       if (currentUrl.includes('login') && !currentUrl.includes('index')) {

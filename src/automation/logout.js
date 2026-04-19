@@ -1,20 +1,10 @@
 /**
  * Logout automation logic
  */
-const { randomDelay, waitForNavigation } = require('./utils');
+const { randomDelay, waitForNavigation, safeExecute } = require('./utils');
 
 async function execute(webContents, sendLog) {
   sendLog('[登出] 正在執行登出程序...');
-
-  const safeExecute = async (script, timeoutMs = 3000) => {
-    try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs));
-      const execPromise = webContents.executeJavaScript(script);
-      return await Promise.race([execPromise, timeoutPromise]);
-    } catch (err) {
-      return "ERROR: " + err.message;
-    }
-  };
 
   const logoutScript = `
     (() => {
@@ -70,7 +60,7 @@ async function execute(webContents, sendLog) {
     })()
   `;
 
-  const result = await safeExecute(logoutScript, 4000);
+  const result = await safeExecute(webContents, logoutScript, 4000);
   
   if (result === "SYS_MSG_CLICKED") {
     sendLog('[登出] 完成登出程序。');
@@ -91,7 +81,7 @@ async function execute(webContents, sendLog) {
         return false;
       })()
     `;
-    const isFinalClicked = await safeExecute(checkFinalScript, 2000);
+    const isFinalClicked = await safeExecute(webContents, checkFinalScript, 2000);
     if (isFinalClicked === true) {
       sendLog('[登出] 確認登出完成。');
       await waitForNavigation(webContents, 3000);

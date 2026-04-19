@@ -3,6 +3,16 @@
  */
 
 /**
+ * Returns a fixed delay in milliseconds.
+ * 
+ * @param {number} ms Milliseconds to wait
+ * @returns {Promise<void>}
+ */
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
  * Returns a randomized delay to simulate human pacing and avoid triggering anti-bot
  * signatures characterized by static interval interactions.
  * 
@@ -10,9 +20,9 @@
  * @param {number} max Maximum milliseconds to wait
  * @returns {Promise<void>}
  */
-async function randomDelay(min = 400, max = 800) {
+function randomDelay(min = 400, max = 800) {
   const ms = Math.floor(Math.random() * (max - min + 1)) + min;
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return delay(ms);
 }
 
 /**
@@ -24,7 +34,7 @@ async function randomDelay(min = 400, max = 800) {
  * @param {number} timeoutMs Maximum time to wait before timing out (defaults to 10s)
  * @returns {Promise<boolean>} True if loaded successfully, false if timed out
  */
-async function waitForNavigation(webContents, timeoutMs = 10000) {
+function waitForNavigation(webContents, timeoutMs = 10000) {
   return new Promise((resolve) => {
     let resolved = false;
 
@@ -48,7 +58,27 @@ async function waitForNavigation(webContents, timeoutMs = 10000) {
   });
 }
 
+/**
+ * Safely executes JavaScript in the given webContents with a timeout.
+ * 
+ * @param {object} webContents The Electron WebContents instance
+ * @param {string} script The JavaScript code to execute
+ * @param {number} timeoutMs Maximum time to wait before timing out
+ * @returns {Promise<any>} The result of the script or an error string
+ */
+async function safeExecute(webContents, script, timeoutMs = 3000) {
+  try {
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs));
+    const execPromise = webContents.executeJavaScript(script);
+    return await Promise.race([execPromise, timeoutPromise]);
+  } catch (err) {
+    return `ERROR: ${err.message}`;
+  }
+}
+
 module.exports = {
+  delay,
   randomDelay,
   waitForNavigation,
+  safeExecute,
 };

@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { app } = require('electron');
+const { delay } = require('./utils');
 
 /**
  * Captures a screenshot of the voting proof page.
@@ -14,42 +15,29 @@ async function execute(webContents, nationalId, company, outputDir, folderStruct
   const baseDir = outputDir || path.join(app.getPath('documents'), '投票證明');
   const dir = folderStructure === 'flat' ? baseDir : path.join(baseDir, nationalId);
   
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   
   const filename = `${nationalId}_${company.code}.png`;
   const filepath = path.join(dir, filename);
 
   // Use executeJavaScript to scroll the barcode block into view before capturing
-  const rect = await webContents.executeJavaScript(`
+  await webContents.executeJavaScript(`
     (() => {
       const barcodeContainer = document.querySelector('.is-warning') || 
                                document.querySelector('#barCodeAccountNoAndStockId')?.closest('div');
                                
       if (barcodeContainer) {
         barcodeContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        const r = barcodeContainer.getBoundingClientRect();
-        return {
-          x: Math.floor(r.x),
-          y: Math.floor(r.y),
-          width: Math.ceil(r.width),
-          height: Math.ceil(r.height)
-        };
       }
-      return null;
     })()
   `);
 
   // Wait a bit after scrolling
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await delay(500);
 
   // Capture the entire visible page
   const image = await webContents.capturePage();
-  const png = image.toPNG();
-  
-  fs.writeFileSync(filepath, png);
+  fs.writeFileSync(filepath, image.toPNG());
   
   return filepath;
 }
