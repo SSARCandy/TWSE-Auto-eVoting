@@ -4,6 +4,9 @@ const fs = require('fs');
 
 let mainWindow;
 let browserView;
+
+// Mask Electron User-Agent to avoid ReCAPTCHA and bot detection
+app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 let stopRequested = false;
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
