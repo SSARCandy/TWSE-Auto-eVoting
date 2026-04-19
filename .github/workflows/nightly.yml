@@ -87,3 +87,4 @@ jobs:
           files: |
             dist/*.exe
             dist/*.dmg
+          update: true
