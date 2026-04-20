@@ -130,10 +130,11 @@ ipcMain.handle('start-voting', async (event, params) => {
     const { id, screenshot } = progress;
     if (!id || id.total <= 0) return;
 
-    const base = id.current - (screenshot && screenshot.total > 0 ? 1 : 0);
-    const screenshotProgress = screenshot ? screenshot.current / screenshot.total : 0;
+    const hasScreenshot = screenshot && screenshot.total > 0;
+    const base = id.current - (hasScreenshot ? 1 : 0);
+    const screenshotProgress = hasScreenshot ? (screenshot.current / screenshot.total) : 0;
     const percent = Math.floor(((base + screenshotProgress) / id.total) * 100);
-    const safePercent = Math.min(100, Math.max(0, percent));
+    const safePercent = Math.min(100, Math.max(0, isNaN(percent) ? 0 : percent));
     
     mainWindow.setTitle(`(${safePercent}%) 股東會投票幫手`);
   };
