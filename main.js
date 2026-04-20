@@ -1,4 +1,4 @@
-const { app, BrowserWindow, BrowserView, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, BrowserView, ipcMain, dialog, Menu, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -44,7 +44,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    title: '台灣股東會自動投票系統',
+    title: '股東會投票幫手',
   });
 
   mainWindow.loadFile(path.join(__dirname, 'src/renderer/index.html'));
@@ -228,7 +228,7 @@ ipcMain.handle('start-voting', async (event, { ids, outputDir, folderStructure }
   stopRequested = false;
   const automation = require('./src/automation/main_flow');
   try {
-    await automation.run(browserView.webContents, ids, (msg) => {
+    const stats = await automation.run(browserView.webContents, ids, (msg) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('log', String(msg));
       }
@@ -236,11 +236,58 @@ ipcMain.handle('start-voting', async (event, { ids, outputDir, folderStructure }
       if (mainWindow && !mainWindow.isDestroyed()) {
         const sanitizedProgress = JSON.parse(JSON.stringify(progress));
         mainWindow.webContents.send('progress', sanitizedProgress);
+
+        const { id, screenshot } = sanitizedProgress;
+        let percent = 0;
+        if (id && id.total > 0) {
+          let baseCompleted = id.current;
+          let subProgress = 0;
+          if (screenshot && screenshot.total > 0) {
+            baseCompleted = id.current - 1;
+            subProgress = screenshot.current / screenshot.total;
+          }
+          percent = Math.floor(((baseCompleted + subProgress) / id.total) * 100);
+          percent = Math.min(100, Math.max(0, percent));
+        }
+        mainWindow.setTitle(`(${percent}%) 股東會投票幫手`);
       }
     }, () => stopRequested, outputDir, folderStructure);
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setTitle('股東會投票幫手');
+      if (stats) {
+        mainWindow.webContents.send('log', `[系統] 完成。累計投票: ${stats.voted}，累計截圖: ${stats.screenshoted}`);
+      }
+      if (!mainWindow.isFocused()) {
+        mainWindow.flashFrame(true);
+        if (Notification.isSupported()) {
+          new Notification({
+            title: '投票完成',
+            body: stats ? `所有作業已結束。累計投票: ${stats.voted}，累計截圖: ${stats.screenshoted}` : '所有排定的股東會投票已結束。',
+            icon: path.join(__dirname, 'assets/icons/icon.png')
+          }).show();
+        }
+      }
+    }
+
     return JSON.parse(JSON.stringify({ success: true }));
   } catch (error) {
     console.error('Automation error:', error);
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setTitle('股東會投票幫手');
+      if (!mainWindow.isFocused()) {
+        mainWindow.flashFrame(true);
+        if (Notification.isSupported()) {
+          new Notification({
+            title: '投票發生錯誤',
+            body: '執行過程中發生錯誤，請查看應用程式日誌。',
+            icon: path.join(__dirname, 'assets/icons/icon.png')
+          }).show();
+        }
+      }
+    }
+
     return JSON.parse(JSON.stringify({ success: false, error: String(error.message) }));
   }
 });

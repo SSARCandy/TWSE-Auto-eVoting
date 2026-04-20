@@ -83,6 +83,7 @@ async function processCompany(webContents, id, code, context, sendLog, sendProgr
       sendLog(`[投票] ${code} 投票成功。`);
 
       context.currentVote++;
+      if (context.sessionStats) context.sessionStats.voted++;
       sendProgress({ id: { current: i + 1, total: idsLength }, vote: { current: context.currentVote, total: totalVotes }, screenshot: { current: context.currentShot, total: totalShots } });
 
       sendLog('[導航] 準備返回查詢頁面...');
@@ -114,6 +115,7 @@ async function processCompany(webContents, id, code, context, sendLog, sendProgr
     sendLog(`[截圖] 證明已儲存: ${path.basename(screenshotPath)}`);
 
     context.currentShot++;
+    if (context.sessionStats) context.sessionStats.screenshoted++;
     sendProgress({ id: { current: i + 1, total: idsLength }, vote: { current: context.currentVote, total: totalVotes }, screenshot: { current: context.currentShot, total: totalShots } });
 
   } catch (procError) {
@@ -121,7 +123,7 @@ async function processCompany(webContents, id, code, context, sendLog, sendProgr
   }
 }
 
-async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopRequested, outputDir, folderStructure) {
+async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopRequested, outputDir, folderStructure, sessionStats) {
   const maskedId = `${id.substring(0, 4)}****${id.substring(8)}`;
 
   sendLog(`[系統] 開始處理身分證: ${maskedId}`);
@@ -157,6 +159,7 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
       totalShots: targetCodes.length,
       currentVote: 0,
       currentShot: 0,
+      sessionStats,
     };
 
     sendLog(`[清單] 找到 ${context.totalVotes} 家需投票，${votedNeedScreenshot.length} 家需截圖。`);
@@ -188,16 +191,20 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
 async function run(webContents, ids, sendLog, sendProgress, isStopRequested, outputDir, folderStructure = 'by_id') {
   if (isMaintenanceTime()) {
     sendLog('[系統] 目前為系統維護時間 (00:00~07:00)，停止自動作業。', 'error');
-    return;
+    return { voted: 0, screenshoted: 0 };
   }
+
+  const sessionStats = { voted: 0, screenshoted: 0 };
 
   for (let i = 0; i < ids.length; i++) {
     if (isStopRequested()) {
       sendLog('[系統] 停止請求已被接收，終止執行。');
       break;
     }
-    await processId(webContents, ids[i], i, ids, sendLog, sendProgress, isStopRequested, outputDir, folderStructure);
+    await processId(webContents, ids[i], i, ids, sendLog, sendProgress, isStopRequested, outputDir, folderStructure, sessionStats);
   }
+
+  return sessionStats;
 }
 
 module.exports = {
