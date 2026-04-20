@@ -42,6 +42,10 @@ const State = {
 const App = {
   async init() {
     State.config = await window.electronAPI.getConfig();
+    const version = await window.electronAPI.getAppVersion();
+    const versionEl = document.getElementById('about-icon');
+    if (versionEl) versionEl.textContent = `v${version}`;
+    
     if (State.config.outputDir) UI.inputs.outputDir.value = State.config.outputDir;
     if (State.config.ids) UI.inputs.ids.value = State.config.ids;
     if (State.config.folderStructure) UI.inputs.folderStructure.value = State.config.folderStructure;
@@ -66,6 +70,13 @@ const App = {
     UI.buttons.stop.addEventListener('click', this.handleStop.bind(this));
     UI.buttons.copyLog.addEventListener('click', this.handleCopyLog.bind(this));
     UI.buttons.clearLog.addEventListener('click', this.handleClearLog.bind(this));
+    
+    const versionEl = document.getElementById('about-icon');
+    if (versionEl) {
+      versionEl.addEventListener('click', () => {
+        window.electronAPI.openAbout();
+      });
+    }
 
     window.onerror = (message, source, lineno) => this.addLog(`[System UI Error] ${message} (at ${source}:${lineno})`, 'error');
     window.onunhandledrejection = (event) => this.addLog(`[Async Error] ${event.reason}`, 'error');

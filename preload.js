@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   getConfig: () => ipcRenderer.invoke('get-config'),
   saveConfig: (config) => ipcRenderer.invoke('save-config', config),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  openAbout: () => ipcRenderer.invoke('open-about'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   onLog: (callback) => ipcRenderer.on('log', (_event, value) => {
     // Only pass simple string value
     callback(String(value));

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>關於股東會投票幫手</title>
+    <style>
+        :root {
+            --bg-main: #1a1a2e;
+            --bg-card: #16213e;
+            --accent: #0f3460;
+            --primary: #4CAF50;
+            --text-white: #ffffff;
+            --text-muted: #94a3b8;
+        }
+
+        body {
+            font-family: 'Noto Sans TC', 'Segoe UI', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-white);
+            margin: 0;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        h2 {
+            margin-bottom: 5px;
+            color: var(--primary);
+        }
+
+        .version {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+
+        .author {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-bottom: 30px;
+        }
+
+        .links {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+        }
+
+        .link-btn {
+            background-color: var(--bg-card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-white);
+            padding: 12px;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .link-btn:hover {
+            background-color: var(--accent);
+            border-color: var(--primary);
+        }
+    </style>
+</head>
+
+<body>
+    <h2>股東會投票幫手</h2>
+    <div class="version" id="version-display">版本: ...</div>
+    <div class="author">作者: Andy Hsu</div>
+
+    <div class="links">
+        <div class="link-btn" onclick="openLink('https://ssarcandy.tw/TWSE-Auto-eVoting/')">📖 使用說明 (README)</div>
+        <div class="link-btn" onclick="openLink('https://github.com/SSARCandy/TWSE-Auto-eVoting')">💻 原始碼</div>
+        <div class="link-btn" onclick="openLink('https://ssarcandy.tw')">🌐 個人網站</div>
+    </div>
+
+    <script>
+        async function init() {
+            const version = await window.electronAPI.getAppVersion();
+            document.getElementById('version-display').textContent = `版本: v${version}`;
+        }
+        init();
+
+        function openLink(url) {
+            window.electronAPI.openExternal(url);
+        }
+    </script>
+</body>
+
+</html>

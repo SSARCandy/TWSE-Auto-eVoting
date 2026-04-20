@@ -1,4 +1,7 @@
-const { app, BrowserWindow, BrowserView, ipcMain } = require('electron');
+const { app, BrowserWindow, BrowserView, ipcMain, shell } = require('electron');
+const path = require('path');
+const pkg = require('./package.json');
+const APP_VERSION = pkg.version;
 
 let mainWindow;
 let browserView;
@@ -90,61 +93,10 @@ function createWindow() {
   });
 }
 
-function setupApplicationMenu() {
-  const { Menu, shell, dialog } = require('electron');
-  const isMac = process.platform === 'darwin';
-
-  const template = [
-    ...(isMac ? [{ label: app.name, submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'quit' }] }] : []),
-    {
-      label: '編輯 (Edit)',
-      submenu: [
-        { label: '復原 (Undo)', role: 'undo' }, { label: '重做 (Redo)', role: 'redo' }, { type: 'separator' },
-        { label: '剪下 (Cut)', role: 'cut' }, { label: '複製 (Copy)', role: 'copy' }, { label: '貼上 (Paste)', role: 'paste' },
-        { label: '全選 (Select All)', role: 'selectAll' }
-      ],
-    },
-    {
-      label: '檢視 (View)',
-      submenu: [
-        { label: '重新載入 (Reload)', role: 'reload' }, { type: 'separator' },
-        {
-          label: '右側網頁開發者工具 (BrowserView DevTools)',
-          accelerator: 'F12',
-          click: () => { if (browserView) browserView.webContents.toggleDevTools(); },
-        },
-        { type: 'separator' },
-        { label: '實際大小 (Reset Zoom)', role: 'resetZoom' },
-        { label: '放大 (Zoom In)', role: 'zoomIn' },
-        { label: '縮小 (Zoom Out)', role: 'zoomOut' }
-      ],
-    },
-    {
-      label: '關於 (About)',
-      submenu: [
-        {
-          label: '關於 TWSE Auto eVoting',
-          click: async () => {
-            const pkg = require('./package.json');
-            await dialog.showMessageBox(mainWindow, {
-              type: 'info',
-              title: '關於 TWSE Auto eVoting',
-              message: `TWSE Auto eVoting\n版本: ${pkg.version}`,
-              buttons: ['GitHub', '關閉'],
-            });
-            shell.openExternal('https://github.com/SSARCandy/TWSE-Auto-eVoting');
-          },
-        }
-      ],
-    }
-  ];
-
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
-}
-
 app.whenReady().then(() => {
   createWindow();
-  setTimeout(setupApplicationMenu, 1000);
+  const { Menu } = require('electron');
+  Menu.setApplicationMenu(null);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -155,9 +107,12 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+ipcMain.handle('get-app-version', () => {
+  return APP_VERSION;
+});
+
 ipcMain.handle('start-voting', async (event, { ids, outputDir, folderStructure, includeCompanyName }) => {
   const { Notification } = require('electron');
-  const path = require('path');
   stopRequested = false;
   const automation = require('./src/automation/main_flow');
   try {
@@ -203,4 +158,26 @@ ipcMain.handle('select-directory', async () => {
 
 ipcMain.handle('get-config', async () => getConfig());
 ipcMain.handle('save-config', async (event, config) => saveConfig(config));
+ipcMain.handle('open-about', async () => {
+  const aboutWindow = new BrowserWindow({
+    width: 400,
+    height: 450,
+    resizable: false,
+    autoHideMenuBar: true,
+    title: '關於股東會投票幫手',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  aboutWindow.loadFile(path.join(__dirname, 'src/renderer/about.html'));
+  return { success: true };
+});
+
+ipcMain.handle('open-external', async (event, url) => {
+  await shell.openExternal(url);
+  return { success: true };
+});
+
 ipcMain.handle('stop-voting', () => { stopRequested = true; return { success: true }; });
