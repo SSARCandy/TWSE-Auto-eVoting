@@ -13,7 +13,7 @@ async function getCompanyList(webContents, sendLog) {
   let pageNum = 1;
 
   while (hasNextPage) {
-    sendLog(`[清單] 正在抓取第 ${pageNum} 頁公司清單...`);
+    sendLog(`[清單] 抓取第 ${pageNum} 頁...`);
     const pageData = await webContents.executeJavaScript(`
       (() => {
         const rows = Array.from(document.querySelectorAll('tr')).filter(row => {
@@ -88,7 +88,7 @@ async function getCompanyList(webContents, sendLog) {
  */
 async function voteForCompany(webContents, company, sendLog, skipClick = false) {
   if (!skipClick) {
-    sendLog(`[投票] 正在點擊 ${company.name} (${company.code}) 的投票按鈕...`);
+    sendLog(`[投票] 點擊 ${company.name} (${company.code})...`);
 
     const waitClick = waitForNavigation(webContents);
     const clickResult = await webContents.executeJavaScript(`
@@ -110,14 +110,14 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
     await randomDelay(1500, 2500);
   }
 
-  sendLog(`[投票] 進入投票頁面，正在執行自動投票程序...`);
+  sendLog(`[投票] 進入頁面，執行程序...`);
 
   let pageCount = 0;
   const maxPages = 5;
 
   while (pageCount < maxPages) {
     pageCount++;
-    sendLog(`[投票] 正在處理第 ${pageCount} 頁...`);
+    sendLog(`[投票] 處理第 ${pageCount} 頁...`);
 
     const pageScript = `
       (async () => {
@@ -196,13 +196,13 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
     if (!result.success) throw new Error(result.reason || '頁面處理失敗');
 
     if (result.type === 'submit') {
-      sendLog('[投票] 偵測到確認頁面，已點擊送出。');
+      sendLog('[投票] 偵測確認頁，點擊送出。');
       await waitNext;
       await randomDelay(1500, 3000);
       break; // End of voting loop
     }
 
-    sendLog('[投票] 已完成本頁投票，點擊下一步...');
+    sendLog('[投票] 本頁完成，點擊下一步...');
     await waitNext;
     await randomDelay(1500, 3000);
   }
@@ -219,7 +219,7 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
   `);
 
   if (!finalCheck) {
-    sendLog(`[警告] 投票結果頁面未顯示明確成功字樣，請檢查截圖。`, 'warning');
+    sendLog(`[警告] 結果不明，請檢查截圖。`, 'warning');
   }
 
   return true;
@@ -286,7 +286,7 @@ async function searchAndNavigate(webContents, stockCode, sendLog) {
 
     throw new Error('搜尋結果逾時或未找到連結');
   } catch (err) {
-    sendLog(`[錯誤] 搜尋股號 ${stockCode} 時發生錯誤: ${err.message}`, 'error');
+    sendLog(`[錯誤] 搜尋 ${stockCode} 失敗: ${err.message}`, 'error');
     throw err;
   }
 }

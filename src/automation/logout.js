@@ -4,7 +4,7 @@
 const { randomDelay, waitForNavigation, safeExecute } = require('./utils');
 
 async function execute(webContents, sendLog) {
-  sendLog('[登出] 正在執行登出程序...');
+  sendLog('[登出] 執行登出...');
 
   const logoutScript = `
     (() => {
@@ -63,11 +63,11 @@ async function execute(webContents, sendLog) {
   const result = await safeExecute(webContents, logoutScript, 4000);
   
   if (result === "SYS_MSG_CLICKED") {
-    sendLog('[登出] 完成登出程序。');
+    sendLog('[登出] 完成。');
     await waitForNavigation(webContents, 3000);
     await randomDelay(300, 500);
   } else if (result === "LOGOUT_INITIATED" || (typeof result === 'string' && result.includes("ERROR:"))) {
-    sendLog('[登出] 已觸發登出指令，等待跳轉...');
+    sendLog('[登出] 已觸發，待跳轉...');
     await waitForNavigation(webContents, 5000);
     
     // Secondary check after navigation
@@ -83,14 +83,14 @@ async function execute(webContents, sendLog) {
     `;
     const isFinalClicked = await safeExecute(webContents, checkFinalScript, 2000);
     if (isFinalClicked === true) {
-      sendLog('[登出] 確認登出完成。');
+      sendLog('[登出] 確認完成。');
       await waitForNavigation(webContents, 3000);
       await randomDelay(200, 400);
     }
   } else if (result === "NOT_FOUND") {
-    sendLog('[系統] 找不到登出按鈕，可能已經登出。', 'info');
+    sendLog('[系統] 無登出鈕，或已登出。', 'info');
   } else {
-    sendLog('[警告] 處理登出流程時發生非預期狀況。', 'warning');
+    sendLog('[警告] 登出異常。', 'warning');
   }
 }
 

@@ -6,22 +6,22 @@ const CONSTANTS = require('../constants');
 const { waitForNavigation, safeExecute, delay } = require('./utils');
 
 async function execute(webContents, nationalId, sendLog) {
-  sendLog('[登入] 正在跳轉至登入頁面...');
+  sendLog('[登入] 跳轉頁面...');
   
   try {
     await webContents.loadURL(CONSTANTS.URLS.LOGIN);
   } catch (err) {
     if (err.message.includes('-3') || err.message.includes('ERR_ABORTED')) {
-      sendLog(`[登入] 載入被中斷，稍後重試...`, 'warning');
+      sendLog(`[登入] 載入中斷，重試...`, 'warning');
       await delay(1500);
       try {
         await webContents.loadURL(CONSTANTS.URLS.LOGIN);
       } catch (retryErr) {
-        sendLog(`[登入] 重試載入頁面失敗: ${retryErr.message}`, 'error');
+        sendLog(`[登入] 重試失敗: ${retryErr.message}`, 'error');
         return false;
       }
     } else {
-      sendLog(`[登入] 載入頁面失敗: ${err.message}`, 'error');
+      sendLog(`[登入] 載入失敗: ${err.message}`, 'error');
       return false;
     }
   }
@@ -40,10 +40,10 @@ async function execute(webContents, nationalId, sendLog) {
   const ready = await safeExecute(webContents, readyScript, 12000);
 
   if (ready !== true) {
-    sendLog('[警告] 登入頁面載入較慢，請稍候...', 'warning');
+    sendLog('[警告] 載入慢，稍候...', 'warning');
   }
 
-  sendLog('[登入] 正在填寫登入資訊...');
+  sendLog('[登入] 填寫資訊...');
 
   const loginScript = `
     (async () => {
@@ -101,7 +101,7 @@ async function execute(webContents, nationalId, sendLog) {
     
     // If it returns ERROR: TIMEOUT or ERROR: context destroyed, it means navigation started or alert popped up.
     if (typeof success === 'string' && success.includes('ERROR:') && !success.includes('TIMEOUT') && !success.includes('destroyed')) {
-      sendLog('[警告] 填寫資訊時發生非預期狀況。', 'warning');
+      sendLog('[警告] 填寫異常。', 'warning');
     }
 
     // Wait for navigation or potential "Duplicate Login" dialog. It resolves instantly if navigation finishes.
@@ -153,10 +153,10 @@ async function execute(webContents, nationalId, sendLog) {
     const resultStr = String(result);
     
     if (resultStr.startsWith("DOM_MODAL_CLICKED") || resultStr.startsWith("NATIVE_DIALOG_CAPTURED")) {
-      sendLog('[登入] 偵測到系統提示，已自動點選確認。');
+      sendLog('[登入] 偵測提示，已點選。');
       await waitForNavigation(webContents, 3000);
     } else if (resultStr !== "NO_DIALOG_FOUND" && !resultStr.startsWith("ERROR: TIMEOUT") && !resultStr.includes('destroyed')) {
-      sendLog('[警告] 處理系統提示時發生異常。', 'warning');
+      sendLog('[警告] 提示處理異常。', 'warning');
     }
     
     let currentUrl = webContents.getURL();
@@ -167,7 +167,7 @@ async function execute(webContents, nationalId, sendLog) {
     }
     
     if (currentUrl.includes('login') && !currentUrl.includes('index')) {
-      sendLog('[警告] 登入後未自動跳轉，嘗試手動導航...', 'warning');
+      sendLog('[警告] 未跳轉，手動導航...', 'warning');
       await webContents.loadURL(CONSTANTS.URLS.INDEX);
       await delay(3000);
       currentUrl = webContents.getURL();
@@ -179,7 +179,7 @@ async function execute(webContents, nationalId, sendLog) {
     
     return true;
   } catch (err) {
-    sendLog(`[登入] 登入腳本執行錯誤: ${err.message}`, 'error');
+    sendLog(`[登入] 腳本錯誤: ${err.message}`, 'error');
     return false;
   }
 }
