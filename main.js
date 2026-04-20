@@ -1,9 +1,12 @@
-const { app, BrowserWindow, BrowserView, ipcMain, session, dialog, Menu } = require('electron');
+const { app, BrowserWindow, BrowserView, ipcMain, dialog, Menu, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
 let mainWindow;
 let browserView;
+
+// Mask Electron User-Agent to avoid ReCAPTCHA and bot detection
+app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 let stopRequested = false;
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
@@ -41,7 +44,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    title: '台灣股東會自動投票系統'
+    title: '股東會投票幫手',
   });
 
   mainWindow.loadFile(path.join(__dirname, 'src/renderer/index.html'));
@@ -66,7 +69,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-    }
+    },
   });
 
   mainWindow.setBrowserView(browserView);
@@ -118,7 +121,7 @@ function setupApplicationMenu() {
           { role: 'unhide' },
           { type: 'separator' },
           { role: 'quit' }
-        ]
+        ],
       }]
       : []),
     {
@@ -134,14 +137,14 @@ function setupApplicationMenu() {
           ? [
             { role: 'pasteAndMatchStyle' },
             { role: 'delete' },
-            { label: '全選 (Select All)', role: 'selectAll' },
+            { label: '全選 (Select All)', role: 'selectAll' }
           ]
           : [
             { label: '刪除 (Delete)', role: 'delete' },
             { type: 'separator' },
             { label: '全選 (Select All)', role: 'selectAll' }
           ])
-      ]
+      ],
     },
     {
       label: '檢視 (View)',
@@ -156,7 +159,7 @@ function setupApplicationMenu() {
             if (browserView) {
               browserView.webContents.toggleDevTools();
             }
-          }
+          },
         },
         { type: 'separator' },
         { label: '實際大小 (Reset Zoom)', role: 'resetZoom' },
@@ -164,7 +167,7 @@ function setupApplicationMenu() {
         { label: '縮小 (Zoom Out)', role: 'zoomOut' },
         { type: 'separator' },
         { label: '切換全螢幕 (Toggle Full Screen)', role: 'togglefullscreen' }
-      ]
+      ],
     },
     {
       label: '關於 (About)',
@@ -176,7 +179,7 @@ function setupApplicationMenu() {
             const pkg = require('./package.json');
             let releaseDate = '未知';
             try {
-              // 在封裝後的 asar 檔案中，package.json 的修改時間即為打包/釋出時間
+              // In the packaged asar file, the package.json modification time serves as the release date
               const stat = require('fs').statSync(require('path').join(__dirname, 'package.json'));
               releaseDate = stat.mtime.toISOString().split('T')[0];
             } catch (e) { }
@@ -187,7 +190,7 @@ function setupApplicationMenu() {
               message: `TWSE Auto eVoting\n\n版本 (Version): ${pkg.version}\n日期 (Release Date): ${releaseDate}`,
               buttons: ['使用說明 (README)', 'GitHub', '作者網站', '關閉'],
               defaultId: 0,
-              cancelId: 3
+              cancelId: 3,
             });
 
             if (response === 0) {
@@ -197,9 +200,9 @@ function setupApplicationMenu() {
             } else if (response === 2) {
               shell.openExternal('https://ssarcandy.tw');
             }
-          }
+          },
         }
-      ]
+      ],
     }
   ];
 
@@ -225,7 +228,7 @@ ipcMain.handle('start-voting', async (event, { ids, outputDir, folderStructure }
   stopRequested = false;
   const automation = require('./src/automation/main_flow');
   try {
-    await automation.run(browserView.webContents, ids, (msg) => {
+    const stats = await automation.run(browserView.webContents, ids, (msg) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('log', String(msg));
       }
@@ -233,18 +236,65 @@ ipcMain.handle('start-voting', async (event, { ids, outputDir, folderStructure }
       if (mainWindow && !mainWindow.isDestroyed()) {
         const sanitizedProgress = JSON.parse(JSON.stringify(progress));
         mainWindow.webContents.send('progress', sanitizedProgress);
+
+        const { id, screenshot } = sanitizedProgress;
+        let percent = 0;
+        if (id && id.total > 0) {
+          let baseCompleted = id.current;
+          let subProgress = 0;
+          if (screenshot && screenshot.total > 0) {
+            baseCompleted = id.current - 1;
+            subProgress = screenshot.current / screenshot.total;
+          }
+          percent = Math.floor(((baseCompleted + subProgress) / id.total) * 100);
+          percent = Math.min(100, Math.max(0, percent));
+        }
+        mainWindow.setTitle(`(${percent}%) 股東會投票幫手`);
       }
     }, () => stopRequested, outputDir, folderStructure);
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setTitle('股東會投票幫手');
+      if (stats) {
+        mainWindow.webContents.send('log', `[系統] 完成。累計投票: ${stats.voted}，累計截圖: ${stats.screenshoted}`);
+      }
+      if (!mainWindow.isFocused()) {
+        mainWindow.flashFrame(true);
+        if (Notification.isSupported()) {
+          new Notification({
+            title: '投票完成',
+            body: stats ? `所有作業已結束。累計投票: ${stats.voted}，累計截圖: ${stats.screenshoted}` : '所有排定的股東會投票已結束。',
+            icon: path.join(__dirname, 'assets/icons/icon.png'),
+          }).show();
+        }
+      }
+    }
+
     return JSON.parse(JSON.stringify({ success: true }));
   } catch (error) {
     console.error('Automation error:', error);
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setTitle('股東會投票幫手');
+      if (!mainWindow.isFocused()) {
+        mainWindow.flashFrame(true);
+        if (Notification.isSupported()) {
+          new Notification({
+            title: '投票發生錯誤',
+            body: '執行過程中發生錯誤，請查看應用程式日誌。',
+            icon: path.join(__dirname, 'assets/icons/icon.png'),
+          }).show();
+        }
+      }
+    }
+
     return JSON.parse(JSON.stringify({ success: false, error: String(error.message) }));
   }
 });
 
 ipcMain.handle('select-directory', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openDirectory']
+    properties: ['openDirectory'],
   });
   const path = result.canceled ? null : result.filePaths[0];
   return JSON.parse(JSON.stringify(path));

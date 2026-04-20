@@ -1,8 +1,9 @@
 /**
- * 登入自動化邏輯
+ * Login automation logic
  */
 
 const CONSTANTS = require('../constants');
+const { waitForNavigation, safeExecute, delay } = require('./utils');
 
 async function execute(webContents, nationalId, sendLog) {
   sendLog('[登入] 正在跳轉至登入頁面...');
@@ -10,30 +11,33 @@ async function execute(webContents, nationalId, sendLog) {
   try {
     await webContents.loadURL(CONSTANTS.URLS.LOGIN);
   } catch (err) {
-    sendLog(`[登入] 載入頁面失敗: ${err.message}`, 'error');
-    return false;
+    if (err.message.includes('-3') || err.message.includes('ERR_ABORTED')) {
+      sendLog(`[登入] 載入被中斷，稍後重試...`, 'warning');
+      await delay(1500);
+      try {
+        await webContents.loadURL(CONSTANTS.URLS.LOGIN);
+      } catch (retryErr) {
+        sendLog(`[登入] 重試載入頁面失敗: ${retryErr.message}`, 'error');
+        return false;
+      }
+    } else {
+      sendLog(`[登入] 載入頁面失敗: ${err.message}`, 'error');
+      return false;
+    }
   }
   
-  const safeExecute = async (script, timeoutMs = 3000) => {
-    try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs));
-      const execPromise = webContents.executeJavaScript(script);
-      return await Promise.race([execPromise, timeoutPromise]);
-    } catch (err) {
-      return "ERROR: " + err.message;
-    }
-  };
-
   // Faster proactive check for existence of key element
-  const ready = await safeExecute(`
+  const readyScript = `
     (async () => {
+      const delay = (ms) => new Promise(r => setTimeout(r, ms));
       for (let i = 0; i < 20; i++) { // Max 10s total
         if (document.getElementById('caType') || document.getElementById('pageIdNo')) return true;
-        await new Promise(r => setTimeout(r, 500));
+        await delay(500);
       }
       return false;
     })()
-  `, 12000);
+  `;
+  const ready = await safeExecute(webContents, readyScript, 12000);
 
   if (ready !== true) {
     sendLog('[警告] 登入頁面載入較慢，請稍候...', 'warning');
@@ -45,20 +49,20 @@ async function execute(webContents, nationalId, sendLog) {
     (async () => {
       const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
       
-      // 預防同步 alert 阻擋執行
+      // Prevent synchronous alert from blocking execution
       window.alert = (msg) => { window.__lastAlertMsg = msg; window.__lastAlert = Date.now(); return true; };
       window.confirm = (msg) => { window.__lastConfirmMsg = msg; window.__lastConfirm = Date.now(); return true; };
       
-      // 1. 選擇券商網路下單憑證
+      // 1. Select broker network order certificate
       const caTypeSelect = document.getElementById('caType');
       if (caTypeSelect) {
         caTypeSelect.value = 'SS'; 
         caTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
         if (typeof window.caTypeChange === 'function') window.caTypeChange();
       }
-      await delay(800);
+      await delay(Math.floor(Math.random() * 400) + 400);
 
-      // 2. 填入身分證字號 / 統編
+      // 2. Fill in National ID / Tax ID
       const idInput = document.querySelector('input[placeholder*="身分證"]') || 
                       document.querySelector('input[placeholder*="統編"]') ||
                       document.querySelector('input.required[placeholder*="身分證"]') || 
@@ -71,19 +75,19 @@ async function execute(webContents, nationalId, sendLog) {
       }
 
       idInput.focus();
-      await delay(200);
+      await delay(Math.floor(Math.random() * 100) + 100);
       idInput.value = '${nationalId}';
       ['input', 'change', 'blur'].forEach(evt => idInput.dispatchEvent(new Event(evt, { bubbles: true })));
       
-      await delay(800);
+      await delay(Math.floor(Math.random() * 400) + 400);
 
-      // 3. 點擊登入
+      // 3. Click Login
       const loginBtn = document.getElementById('loginBtn');
       if (!loginBtn) {
         throw new Error('找不到登入按鈕 (預期 ID: loginBtn)');
       }
 
-      // 使用 setTimeout 避免點擊觸發導航時卡住 executeJavaScript Promise
+      // Use setTimeout to prevent click from triggering navigation and blocking executeJavaScript Promise
       setTimeout(() => {
           try { loginBtn.click(); } catch(e) {}
       }, 50);
@@ -93,14 +97,15 @@ async function execute(webContents, nationalId, sendLog) {
   `;
 
   try {
-    const success = await safeExecute(loginScript, 4000);
+    const success = await safeExecute(webContents, loginScript, 4000);
+    
     // If it returns ERROR: TIMEOUT or ERROR: context destroyed, it means navigation started or alert popped up.
     if (typeof success === 'string' && success.includes('ERROR:') && !success.includes('TIMEOUT') && !success.includes('destroyed')) {
       sendLog('[警告] 填寫資訊時發生非預期狀況。', 'warning');
     }
 
-    // Wait for navigation or potential "Duplicate Login" dialog
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Wait for navigation or potential "Duplicate Login" dialog. It resolves instantly if navigation finishes.
+    await waitForNavigation(webContents, 3000);
 
     // 4. Handle any popup if it appears (e.g. "Duplicate Login", "No pending votes")
     const handleLoginDialog = `
@@ -144,29 +149,27 @@ async function execute(webContents, nationalId, sendLog) {
       })()
     `;
     
-    const result = await safeExecute(handleLoginDialog, 4000);
+    const result = await safeExecute(webContents, handleLoginDialog, 4000);
     const resultStr = String(result);
     
     if (resultStr.startsWith("DOM_MODAL_CLICKED") || resultStr.startsWith("NATIVE_DIALOG_CAPTURED")) {
       sendLog('[登入] 偵測到系統提示，已自動點選確認。');
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await waitForNavigation(webContents, 3000);
     } else if (resultStr !== "NO_DIALOG_FOUND" && !resultStr.startsWith("ERROR: TIMEOUT") && !resultStr.includes('destroyed')) {
       sendLog('[警告] 處理系統提示時發生異常。', 'warning');
     }
     
     let currentUrl = webContents.getURL();
     for (let k = 0; k < 5; k++) {
-      if (!currentUrl.includes('login') || currentUrl.includes('index')) {
-        break;
-      }
-      await new Promise(r => setTimeout(r, 1000));
+      if (!currentUrl.includes('login') || currentUrl.includes('index')) break;
+      await delay(1000);
       currentUrl = webContents.getURL();
     }
     
     if (currentUrl.includes('login') && !currentUrl.includes('index')) {
       sendLog('[警告] 登入後未自動跳轉，嘗試手動導航...', 'warning');
       await webContents.loadURL(CONSTANTS.URLS.INDEX);
-      await new Promise(r => setTimeout(r, 3000));
+      await delay(3000);
       currentUrl = webContents.getURL();
         
       if (currentUrl.includes('login') && !currentUrl.includes('index')) {

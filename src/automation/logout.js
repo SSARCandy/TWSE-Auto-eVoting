@@ -1,27 +1,18 @@
 /**
- * 登出自動化邏輯
+ * Logout automation logic
  */
+const { randomDelay, waitForNavigation, safeExecute } = require('./utils');
 
 async function execute(webContents, sendLog) {
   sendLog('[登出] 正在執行登出程序...');
 
-  const safeExecute = async (script, timeoutMs = 3000) => {
-    try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs));
-      const execPromise = webContents.executeJavaScript(script);
-      return await Promise.race([execPromise, timeoutPromise]);
-    } catch (err) {
-      return "ERROR: " + err.message;
-    }
-  };
-
   const logoutScript = `
     (() => {
-      // 預防同步 alert 或 confirm 阻擋執行
+      // Prevent synchronous alert or confirm from blocking execution
       window.alert = () => { return true; };
       window.confirm = () => { return true; };
 
-      // 特例檢查：如果已經是在「系統回覆訊息」頁面
+      // Special case check: if already on "System Reply Message" page
       const doProcessBtn = document.querySelector('button[onclick*="doProcess()"]');
       const isSystemMessagePage = document.querySelector('.c-sysMsg_table') || document.body.innerHTML.includes('SYS_LOGOUT_SUCCESS');
       
@@ -30,7 +21,7 @@ async function execute(webContents, sendLog) {
           return "SYS_MSG_CLICKED";
       }
 
-      // 嘗試尋找 Logout 或 登出 按鈕
+      // Try to find Logout button
       const logoutBtn = document.querySelector('.c-header_logout') || 
                         document.querySelector('.c-header__logout') ||
                         document.querySelector('div[onclick*="logOff"]') ||
@@ -42,7 +33,7 @@ async function execute(webContents, sendLog) {
         setTimeout(() => {
             try { logoutBtn.click(); } catch(e) {}
             
-            // 延遲 1 秒後處理第一層確認對話框
+            // Delay 1 second to handle first level confirmation dialog
             setTimeout(() => {
                 try {
                     const confirmBtn = document.getElementById('comfirmDialog_okBtn') || 
@@ -59,7 +50,7 @@ async function execute(webContents, sendLog) {
         return "LOGOUT_INITIATED";
       }
       
-      // 若只有 doProcess 按鈕但沒有系統訊息特徵
+      // If only doProcess button exists without system message features
       if (doProcessBtn) {
           setTimeout(() => doProcessBtn.click(), 50);
           return "SYS_MSG_CLICKED";
@@ -69,16 +60,17 @@ async function execute(webContents, sendLog) {
     })()
   `;
 
-  const result = await safeExecute(logoutScript, 4000);
+  const result = await safeExecute(webContents, logoutScript, 4000);
   
   if (result === "SYS_MSG_CLICKED") {
     sendLog('[登出] 完成登出程序。');
-    await new Promise(r => setTimeout(r, 2000));
+    await waitForNavigation(webContents, 3000);
+    await randomDelay(300, 500);
   } else if (result === "LOGOUT_INITIATED" || (typeof result === 'string' && result.includes("ERROR:"))) {
     sendLog('[登出] 已觸發登出指令，等待跳轉...');
-    await new Promise(r => setTimeout(r, 4000));
+    await waitForNavigation(webContents, 5000);
     
-    // 跳轉後補刀
+    // Secondary check after navigation
     const checkFinalScript = `
       (() => {
         const btn = document.querySelector('button[onclick*="doProcess()"]');
@@ -89,10 +81,11 @@ async function execute(webContents, sendLog) {
         return false;
       })()
     `;
-    const isFinalClicked = await safeExecute(checkFinalScript, 2000);
+    const isFinalClicked = await safeExecute(webContents, checkFinalScript, 2000);
     if (isFinalClicked === true) {
       sendLog('[登出] 確認登出完成。');
-      await new Promise(r => setTimeout(r, 2000));
+      await waitForNavigation(webContents, 3000);
+      await randomDelay(200, 400);
     }
   } else if (result === "NOT_FOUND") {
     sendLog('[系統] 找不到登出按鈕，可能已經登出。', 'info');
