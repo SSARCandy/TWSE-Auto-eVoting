@@ -159,7 +159,7 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
       currentShot: 0,
     };
 
-    sendLog(`[清單] 找到 ${context.totalVotes} 家需投票，${votedNeedScreenshot.length} 家需補截圖。共需處理 ${context.totalShots} 家。`);
+    sendLog(`[清單] 找到 ${context.totalVotes} 家需投票，${votedNeedScreenshot.length} 家需截圖。`);
     sendProgress({ id: { current: i + 1, total: ids.length }, vote: { current: context.currentVote, total: context.totalVotes }, screenshot: { current: context.currentShot, total: context.totalShots } });
 
     for (const code of targetCodes) {
@@ -177,7 +177,7 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
     const waitLogin = waitForNavigation(webContents);
     webContents.loadURL(CONSTANTS.URLS.LOGIN);
     await waitLogin;
-    await randomDelay(200, 500);
+    await randomDelay(1000, 2000);
 
     sendLog(`[系統] ${maskedId} 處理流程結束。`, 'info');
   } catch (error) {

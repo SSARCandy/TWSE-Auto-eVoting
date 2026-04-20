@@ -76,7 +76,7 @@ async function getCompanyList(webContents, sendLog) {
     if (hasNextPage) {
       pageNum++;
       await waitForNavigation(webContents, 6000);
-      await randomDelay(300, 600);
+      await randomDelay(1500, 2500);
     }
   }
 
@@ -107,13 +107,13 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
     if (!clickResult) throw new Error('無法找到或點擊投票按鈕');
 
     await waitClick;
-    await randomDelay(300, 600);
+    await randomDelay(1500, 2500);
   }
 
   sendLog(`[投票] 進入投票頁面，正在執行自動投票程序...`);
 
   let pageCount = 0;
-  const maxPages = 10;
+  const maxPages = 5;
 
   while (pageCount < maxPages) {
     pageCount++;
@@ -192,19 +192,19 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
 
     const waitNext = waitForNavigation(webContents, 10000);
     const result = await webContents.executeJavaScript(pageScript);
-    
+
     if (!result.success) throw new Error(result.reason || '頁面處理失敗');
 
     if (result.type === 'submit') {
       sendLog('[投票] 偵測到確認頁面，已點擊送出。');
       await waitNext;
-      await randomDelay(300, 600);
+      await randomDelay(1500, 3000);
       break; // End of voting loop
     }
-    
+
     sendLog('[投票] 已完成本頁投票，點擊下一步...');
     await waitNext;
-    await randomDelay(300, 600);
+    await randomDelay(1500, 3000);
   }
 
   if (pageCount >= maxPages) {
@@ -254,7 +254,7 @@ async function searchAndNavigate(webContents, stockCode, sendLog) {
   try {
     const result = await webContents.executeJavaScript(searchScript);
     if (!result.success) throw new Error(result.reason);
-    
+
     // Polling for search results (Max ~10s)
     for (let i = 0; i < 20; i++) {
       await delay(500); // Shorten polling delay for search results
@@ -276,10 +276,10 @@ async function searchAndNavigate(webContents, stockCode, sendLog) {
                 return null;
             })()
         `);
-        
+
       if (linkResult && linkResult.found) {
         await waitSearchNav;
-        await randomDelay(300, 600);
+        await randomDelay(1500, 3000);
         return { success: true, type: linkResult.type };
       }
     }

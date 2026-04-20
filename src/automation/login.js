@@ -11,8 +11,19 @@ async function execute(webContents, nationalId, sendLog) {
   try {
     await webContents.loadURL(CONSTANTS.URLS.LOGIN);
   } catch (err) {
-    sendLog(`[登入] 載入頁面失敗: ${err.message}`, 'error');
-    return false;
+    if (err.message.includes('-3') || err.message.includes('ERR_ABORTED')) {
+      sendLog(`[登入] 載入被中斷，稍後重試...`, 'warning');
+      await delay(1500);
+      try {
+        await webContents.loadURL(CONSTANTS.URLS.LOGIN);
+      } catch (retryErr) {
+        sendLog(`[登入] 重試載入頁面失敗: ${retryErr.message}`, 'error');
+        return false;
+      }
+    } else {
+      sendLog(`[登入] 載入頁面失敗: ${err.message}`, 'error');
+      return false;
+    }
   }
   
   // Faster proactive check for existence of key element
