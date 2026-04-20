@@ -1,10 +1,10 @@
 # TWSE eVoting Auto Project
 
 ## What Is
-Electron desktop app. Automate TDCC e-Voting. Login with ID. Find pending/voted company. Vote agree/against/abstain. Take screenshot proof. Logout safe.
+Electron desktop app. Automate TDCC e-Voting. Login with ID. Find pending/voted company. Vote agree/against/abstain. Take screenshot proof. Logout safe. **Runs in background/unfocused. Notify user on completion/error.**
 
 ### Architecture
-- **Main (`main.js`)**: Manage window. Set `BrowserView`. Handle IPC.
+- **Main (`main.js`)**: Manage window. Set `BrowserView`. Handle IPC. **Trigger system notifications when window unfocused.**
 - **Preload (`preload.js`)**: Secure bridge renderer ↔ main (`contextBridge`).
 - **Renderer (`src/renderer/`)**: UI. HTML, Vanilla CSS, JS. No big framework.
 - **Auto Engine (`src/automation/`)**: Interact with TDCC.
@@ -29,6 +29,7 @@ Use Node + Electron.
 - **DOM**: Execute via `webContents.executeJavaScript`.
 - **Async**: `async/await`. Polling wait for dynamic element.
 - **Block Dialogs**: `window.alert` block JS thread. Override them first in injected script.
+- **No Focus Dependency**: Logic must work when window minimized/background.
 - **No Crash**: `try/catch` automation steps. `sendLog` error to UI. Move to next account.
 - **Config**: Put URL in `src/constants.js`.
 - **UI**: Vanilla JS/CSS. No Tailwind.
