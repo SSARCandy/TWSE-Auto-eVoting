@@ -12,6 +12,7 @@ let stopRequested = false;
 
 // Mask Electron User-Agent
 app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+app.setAppUserModelId('股東會投票幫手');
 
 function getConfig() {
   const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
@@ -154,14 +155,13 @@ ipcMain.handle('start-voting', async (event, params) => {
     if (!mainWindow || mainWindow.isDestroyed()) return { success: true };
 
     mainWindow.setTitle('股東會投票幫手');
-    if (stats) {
-      sendLog(`[系統] 完成。累計投票: ${stats.voted}，累計截圖: ${stats.screenshoted}`);
-    }
+    const msg = `累計投票: ${stats.voted}，累計截圖: ${stats.screenshoted}`;
+    sendLog(`[系統] 完成。${msg}`);
 
     if (!mainWindow.isFocused() && Notification.isSupported()) {
       new Notification({ 
         title: '投票完成', 
-        body: '所有作業已結束。', 
+        body: msg, 
         icon: path.join(__dirname, 'assets/icons/icon.png'), 
       }).show();
     }
