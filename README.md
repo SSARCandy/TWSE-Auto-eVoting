@@ -1,4 +1,4 @@
-# TWSE Auto eVoting (台灣股東會自動投票系統)
+# TWSE Auto eVoting (股東會投票幫手)
 
 [![Nightly Build Release](https://github.com/SSARCandy/TWSE-eVoting/actions/workflows/nightly.yml/badge.svg)](https://github.com/SSARCandy/TWSE-eVoting/actions/workflows/nightly.yml)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)

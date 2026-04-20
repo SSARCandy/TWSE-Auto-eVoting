@@ -1,7 +1,7 @@
 {
   "name": "twse-auto-evoting",
   "version": "1.3.0",
-  "description": "台灣股東會自動投票系統",
+  "description": "股東會投票幫手",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
