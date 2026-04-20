@@ -264,7 +264,7 @@ ipcMain.handle('start-voting', async (event, { ids, outputDir, folderStructure }
           new Notification({
             title: '投票完成',
             body: stats ? `所有作業已結束。累計投票: ${stats.voted}，累計截圖: ${stats.screenshoted}` : '所有排定的股東會投票已結束。',
-            icon: path.join(__dirname, 'assets/icons/icon.png')
+            icon: path.join(__dirname, 'assets/icons/icon.png'),
           }).show();
         }
       }
@@ -282,7 +282,7 @@ ipcMain.handle('start-voting', async (event, { ids, outputDir, folderStructure }
           new Notification({
             title: '投票發生錯誤',
             body: '執行過程中發生錯誤，請查看應用程式日誌。',
-            icon: path.join(__dirname, 'assets/icons/icon.png')
+            icon: path.join(__dirname, 'assets/icons/icon.png'),
           }).show();
         }
       }

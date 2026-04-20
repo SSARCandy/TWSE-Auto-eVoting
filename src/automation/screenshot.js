@@ -36,8 +36,51 @@ async function execute(webContents, nationalId, company, outputDir, folderStruct
   await delay(500);
 
   // Capture the entire visible page
-  const image = await webContents.capturePage();
-  fs.writeFileSync(filepath, image.toPNG());
+  let image;
+  try {
+    image = await webContents.capturePage();
+    if (image.isEmpty()) throw new Error('Screenshot empty');
+    fs.writeFileSync(filepath, image.toPNG());
+  } catch (err) {
+    const { BrowserWindow } = require('electron');
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      const isMinimized = win.isMinimized();
+      const isVisible = win.isVisible();
+      
+      let originalOpacity, originalFocusable;
+      if (isMinimized || !isVisible) {
+        originalOpacity = win.getOpacity();
+        originalFocusable = win.isFocusable();
+        
+        // Prevent stealing focus and make it invisible
+        win.setOpacity(0);
+        win.setFocusable(false);
+      }
+      
+      if (isMinimized) win.restore();
+      if (!isVisible) win.showInactive();
+      
+      // Wait for rendering surface to be allocated
+      await delay(500); 
+      
+      try {
+        image = await webContents.capturePage();
+        if (image.isEmpty()) throw new Error('Still empty');
+        fs.writeFileSync(filepath, image.toPNG());
+      } finally {
+        if (isMinimized) win.minimize();
+        else if (!isVisible) win.hide();
+        
+        if (isMinimized || !isVisible) {
+          win.setOpacity(originalOpacity);
+          win.setFocusable(originalFocusable);
+        }
+      }
+    } else {
+      throw err;
+    }
+  }
   
   return filepath;
 }
