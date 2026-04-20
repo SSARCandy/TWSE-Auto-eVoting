@@ -145,7 +145,8 @@ h1 {
     content: attr(data-tooltip);
     position: absolute;
     bottom: 150%;
-    left: -40px; /* Fixed offset that keeps the tooltip nicely contained within the 410px space */
+    left: -40px;
+    /* Fixed offset that keeps the tooltip nicely contained within the 410px space */
     right: auto;
     background-color: #334155;
     color: #f8fafc;
@@ -156,13 +157,14 @@ h1 {
     width: max-content;
     max-width: 260px;
     white-space: pre-line;
-    word-break: break-word; /* Ensure long words wrap */
+    word-break: break-word;
+    /* Ensure long words wrap */
     line-height: 1.4;
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.2s, visibility 0.2s, transform 0.2s;
     z-index: 100;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     pointer-events: none;
     text-align: left;
 }
@@ -171,7 +173,8 @@ h1 {
     content: '';
     position: absolute;
     bottom: calc(150% - 10px);
-    left: 7px; /* Center of the 14px parent icon */
+    left: 7px;
+    /* Center of the 14px parent icon */
     transform: translateX(-50%);
     border-width: 5px;
     border-style: solid;
@@ -354,7 +357,7 @@ textarea:focus {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 200px;
+    min-height: 180px;
 }
 
 .log-header {
