@@ -6,7 +6,7 @@ const logout = require('./logout');
 const CONSTANTS = require('../constants');
 const { randomDelay, waitForNavigation, isMaintenanceTime, isScreenshotExists } = require('./utils');
 
-async function processCompany(webContents, id, company, context, sendLog, sendProgress) {
+async function processCompany(webContents, id, company, context, sendLog, sendProgress, isStopRequested) {
   const { pendingCodes, outputDir, folderStructure, includeCompanyName, i, idsLength, totalVotes, totalShots } = context;
   const { code } = company;
 
@@ -24,11 +24,14 @@ async function processCompany(webContents, id, company, context, sendLog, sendPr
 
   sendLog(`[導航] 搜尋: ${code}...`);
   try {
+    if (isStopRequested()) return;
     const navResult = await voting.searchAndNavigate(webContents, code, sendLog);
 
     if (navResult.type === 'vote') {
+      if (isStopRequested()) return;
       sendLog(`[投票] 偵測未投，開始程序...`);
-      await voting.voteForCompany(webContents, company, sendLog, true);
+      await voting.voteForCompany(webContents, company, sendLog, true, isStopRequested);
+      if (isStopRequested()) return;
       sendLog(`[投票] ${code} 成功。`);
 
       context.currentVote++;
@@ -49,6 +52,7 @@ async function processCompany(webContents, id, company, context, sendLog, sendPr
       await waitGo;
       await randomDelay(200, 500);
 
+      if (isStopRequested()) return;
       sendLog(`[截圖] 查詢 ${code}...`);
       const waitQry = waitForNavigation(webContents);
       const clickedQry = await webContents.executeJavaScript(`(() => { const link = document.querySelector('a[onclick*="\\'${code}\\',\\'qry\\'"]'); if(link){ link.click(); return true; } return false; })()`);
@@ -67,6 +71,7 @@ async function processCompany(webContents, id, company, context, sendLog, sendPr
       }
     }
 
+    if (isStopRequested()) return;
     sendLog(`[截圖] 擷取 ${code} 證明...`);
     const screenshotPath = await screenshot.execute(webContents, id, company, outputDir, folderStructure, includeCompanyName);
     sendLog(`[截圖] 已存: ${path.basename(screenshotPath)}`);
@@ -80,6 +85,7 @@ async function processCompany(webContents, id, company, context, sendLog, sendPr
     });
 
   } catch (procError) {
+    if (isStopRequested()) return;
     sendLog(`[錯誤] ${code} 異常: ${procError.message}，下一間。`, 'error');
   }
 }
@@ -133,9 +139,14 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
     for (const company of targetCompanies) {
       if (isStopRequested()) break;
 
-      await processCompany(webContents, id, company, context, sendLog, sendProgress);
+      await processCompany(webContents, id, company, context, sendLog, sendProgress, isStopRequested);
 
       if (!isStopRequested()) await voting.navigateBackToList(webContents, sendLog);
+    }
+
+    if (isStopRequested()) {
+      sendLog(`[系統] ${maskedId} 已收停止請求，停止作業。`);
+      return;
     }
 
     await logout.execute(webContents, sendLog);

@@ -216,5 +216,8 @@ ipcMain.handle('open-external', async (event, url) => {
 
 ipcMain.handle('stop-voting', () => { 
   stopRequested = true; 
+  if (browserView && browserView.webContents) {
+    browserView.webContents.stop();
+  }
   return { success: true }; 
 });

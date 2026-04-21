@@ -86,7 +86,9 @@ async function getCompanyList(webContents, sendLog) {
 /**
  * Automates the voting process for a single company.
  */
-async function voteForCompany(webContents, company, sendLog, skipClick = false) {
+async function voteForCompany(webContents, company, sendLog, skipClick = false, isStopRequested = () => false) {
+  if (isStopRequested()) return;
+
   if (!skipClick) {
     sendLog(`[投票] 點擊 ${company.name} (${company.code})...`);
 
@@ -104,6 +106,7 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
 
     if (!clickResult) throw new Error('無法找到或點擊投票按鈕');
     await waitClick;
+    if (isStopRequested()) return;
     await randomDelay(1500, 2500);
   }
 
@@ -113,6 +116,8 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
   const maxPages = 5;
 
   while (pageCount < maxPages) {
+    if (isStopRequested()) return;
+
     pageCount++;
     sendLog(`[投票] 處理第 ${pageCount} 頁...`);
 
@@ -178,16 +183,20 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false) 
     if (result.type === 'submit') {
       sendLog('[投票] 偵測確認頁，點擊送出。');
       await waitNext;
+      if (isStopRequested()) return;
       await randomDelay(1500, 3000);
       break; 
     }
 
     sendLog('[投票] 本頁完成，點擊下一步...');
     await waitNext;
+    if (isStopRequested()) return;
     await randomDelay(1500, 3000);
   }
 
   if (pageCount >= maxPages) throw new Error(`超過最大頁數限制 (${maxPages})`);
+
+  if (isStopRequested()) return;
 
   const finalCheck = await webContents.executeJavaScript(`
     (() => {
