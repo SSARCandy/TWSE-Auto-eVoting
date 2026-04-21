@@ -1,6 +1,7 @@
-const { app, BrowserWindow, BrowserView, ipcMain, shell, Notification, Menu } = require('electron');
+const { app, BrowserWindow, BrowserView, ipcMain, shell, Notification, Menu, dialog, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
+
 const pkg = require('./package.json');
 const CONSTANTS = require('./src/constants');
 
@@ -9,6 +10,67 @@ const APP_VERSION = pkg.version;
 let mainWindow;
 let browserView;
 let stopRequested = false;
+
+function sendLog(msg, type = '') {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('log', String(msg), type);
+}
+
+async function checkForUpdates() {
+  sendLog('[系統] 正在檢查更新...', 'info');
+
+  const fetchRelease = () => new Promise((resolve, reject) => {
+    const req = net.request({
+      method: 'GET',
+      url: CONSTANTS.URLS.GITHUB_API_LATEST,
+      headers: { 'User-Agent': 'TWSE-Auto-eVoting-App' },
+    });
+    req.on('response', (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => res.statusCode === 200 ? resolve(JSON.parse(data)) : reject(new Error(res.statusCode)));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+
+  try {
+    const release = await fetchRelease();
+    const latestVersion = release.tag_name.replace('v', '');
+
+    if (!isNewerVersion(latestVersion, APP_VERSION)) {
+      sendLog(`[系統] 目前已是最新版本 v${APP_VERSION}`, 'info');
+      return;
+    }
+
+    sendLog(`[更新] 發現新版本 v${latestVersion}`, 'info');
+
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: '發現新版本',
+      message: `偵測到新版本 v${latestVersion}`,
+      detail: `建議前往 GitHub 下載最新版本 v${latestVersion} 以確保功能正常。\n目前版本: v${APP_VERSION}`,
+      buttons: ['前往下載', '稍後'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+
+    if (response !== 0) return;
+    shell.openExternal(`${CONSTANTS.URLS.GITHUB_REPO}/releases/latest`);
+  } catch (err) {
+    sendLog(`[系統] 檢查更新失敗: ${err.message}`, 'error');
+  }
+}
+
+function isNewerVersion(latest, current) {
+  const l = latest.split('.').map(Number);
+  const c = current.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if (l[i] > (c[i] || 0)) return true;
+    if (l[i] < (c[i] || 0)) return false;
+  }
+  return false;
+}
 
 // Mask Electron User-Agent
 app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -98,6 +160,10 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'src/renderer/index.html'));
   mainWindow.webContents.on('before-input-event', handleDevToolsShortcut(mainWindow.webContents));
 
+  mainWindow.webContents.on('did-finish-load', () => {
+    checkForUpdates();
+  });
+
   setTimeout(createBrowserView, 400);
 
   app.on('select-client-certificate', (event, webContents, url, list, callback) => {
@@ -126,11 +192,6 @@ ipcMain.handle('start-voting', async (event, params) => {
   stopRequested = false;
   const automation = require('./src/automation/main_flow');
   const { calculateProgress } = require('./src/automation/utils');
-
-  const sendLog = (msg, type = '') => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send('log', String(msg), type);
-  };
 
   let maxPercent = 0;
   const sendProgress = (progress) => {
@@ -189,7 +250,6 @@ ipcMain.handle('start-voting', async (event, params) => {
 });
 
 ipcMain.handle('select-directory', async () => {
-  const { dialog } = require('electron');
   const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
   return result.canceled ? null : result.filePaths[0];
 });
