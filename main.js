@@ -78,8 +78,10 @@ function createBrowserView() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1400,
+    width: 1000,
     height: 900,
+    minWidth: 900,
+    minHeight: 900,
     show: true,
     backgroundColor: '#1a1a2e',
     paintWhenInitiallyHidden: false,
