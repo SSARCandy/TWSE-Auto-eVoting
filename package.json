@@ -25,8 +25,8 @@
   },
   "build": {
     "appId": "com.ssarcandy.twse-auto-evoting",
-    "productName": "股東會投票幫手",
-    "artifactName": "${productName}-v${version}.${ext}",
+    "productName": "TWSE Auto eVoting",
+    "artifactName": "TWSE-Auto-eVoting-v${version}.${ext}",
     "directories": {
       "output": "dist"
     },
@@ -44,7 +44,7 @@
       "category": "public.app-category.utilities"
     },
     "dmg": {
-      "title": "股東會投票幫手 v${version}"
+      "title": "股東會投票幫手-v${version}"
     },
     "files": [
       "main.js",
