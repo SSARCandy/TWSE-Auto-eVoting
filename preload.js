@@ -9,9 +9,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   openAbout: () => ipcRenderer.invoke('open-about'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-  onLog: (callback) => ipcRenderer.on('log', (_event, value) => {
-    // Only pass simple string value
-    callback(String(value));
+  onLog: (callback) => ipcRenderer.on('log', (_event, msg, type) => {
+    callback(String(msg), type);
   }),
   onProgress: (callback) => ipcRenderer.on('progress', (_event, value) => {
     // Deep copy to ensure serializable data only

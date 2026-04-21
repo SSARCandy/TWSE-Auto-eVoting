@@ -50,16 +50,14 @@
                         <span class="info-icon"
                             data-tooltip="身分證字號分層: 分別建立身分證字號的子資料夾。&#10;扁平化檔案結構: 所有的截圖都放在指定資料夾內。">i</span>
                     </label>
-                    <select id="folder-structure" class="select-input"
-                        style="width: 100%; padding: 8px 12px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; background-color: rgba(0, 0, 0, 0.2); color: #fff; font-size: 0.9rem; font-family: 'Noto Sans TC', sans-serif; cursor: pointer;">
-                        <option value="by_id" style="background-color: #16213e; color: #fff;">身分證字號分層 (子資料夾)</option>
-                        <option value="flat" style="background-color: #16213e; color: #fff;">扁平化檔案結構 (全部存在同一層)</option>
+                    <select id="folder-structure" class="select-input">
+                        <option value="by_id">身分證字號分層 (子資料夾)</option>
+                        <option value="flat">扁平化檔案結構 (全部存在同一層)</option>
                     </select>
                 </div>
 
                 <div class="input-group">
-                    <label
-                        style="font-size: 0.9rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
+                    <label class="label-with-info">
                         檔名包含公司名稱
                         <span class="info-icon"
                             data-tooltip="截圖命名規則&#10;是：[身分證字號]_[股票代號]_[公司名稱].png。&#10;否：[身分證字號]_[股票代號].png。">i</span>
@@ -87,29 +85,15 @@
             <section class="progress-section">
                 <div class="progress-group">
                     <div class="progress-info">
-                        <span>帳號進度:</span>
-                        <span id="id-progress-val">0/0</span>
+                        <span>總進度
+                            <span id="progress-status-text">
+                                (帳號: 0/0 | 投票: 0/0 | 截圖: 0/0)
+                            </span>
+                        </span>
+                        <span id="overall-progress-val">0%</span>
                     </div>
                     <div class="progress-bar-container">
-                        <div id="id-progress-fill" class="progress-bar-fill"></div>
-                    </div>
-                </div>
-                <div class="progress-group">
-                    <div class="progress-info">
-                        <span>投票進度:</span>
-                        <span id="vote-progress-val">0/0</span>
-                    </div>
-                    <div class="progress-bar-container">
-                        <div id="vote-progress-fill" class="progress-bar-fill"></div>
-                    </div>
-                </div>
-                <div class="progress-group">
-                    <div class="progress-info">
-                        <span>截圖進度:</span>
-                        <span id="shot-progress-val">0/0</span>
-                    </div>
-                    <div class="progress-bar-container">
-                        <div id="shot-progress-fill" class="progress-bar-fill"></div>
+                        <div id="overall-progress-fill" class="progress-bar-fill"></div>
                     </div>
                 </div>
             </section>

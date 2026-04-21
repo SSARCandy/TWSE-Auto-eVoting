@@ -79,9 +79,9 @@ function createBrowserView() {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1000,
-    height: 900,
+    height: 850,
     minWidth: 900,
-    minHeight: 900,
+    minHeight: 850,
     show: true,
     backgroundColor: '#1a1a2e',
     paintWhenInitiallyHidden: false,
@@ -125,26 +125,24 @@ ipcMain.handle('start-voting', async (event, params) => {
   const { ids, outputDir, folderStructure, includeCompanyName } = params;
   stopRequested = false;
   const automation = require('./src/automation/main_flow');
+  const { calculateProgress } = require('./src/automation/utils');
 
-  const sendLog = (msg) => {
+  const sendLog = (msg, type = '') => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send('log', String(msg));
+    mainWindow.webContents.send('log', String(msg), type);
   };
 
+  let maxPercent = 0;
   const sendProgress = (progress) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send('progress', JSON.parse(JSON.stringify(progress)));
 
-    const { id, screenshot } = progress;
-    if (!id || id.total <= 0) return;
+    const currentPercent = calculateProgress(progress);
+    if (currentPercent > maxPercent) {
+      maxPercent = currentPercent;
+    }
 
-    const hasScreenshot = screenshot && screenshot.total > 0;
-    const base = id.current - (hasScreenshot ? 1 : 0);
-    const screenshotProgress = hasScreenshot ? (screenshot.current / screenshot.total) : 0;
-    const percent = Math.floor(((base + screenshotProgress) / id.total) * 100);
-    const safePercent = Math.min(100, Math.max(0, isNaN(percent) ? 0 : percent));
-
-    mainWindow.setTitle(`(${safePercent}%) 股東會投票幫手`);
+    mainWindow.setTitle(`(${maxPercent}%) 股東會投票幫手`);
   };
 
   try {

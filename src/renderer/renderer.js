@@ -22,9 +22,9 @@ const UI = {
     container: document.getElementById('log-container'),
   },
   progress: {
-    id: { val: document.getElementById('id-progress-val'), fill: document.getElementById('id-progress-fill') },
-    vote: { val: document.getElementById('vote-progress-val'), fill: document.getElementById('vote-progress-fill') },
-    shot: { val: document.getElementById('shot-progress-val'), fill: document.getElementById('shot-progress-fill') },
+    val: document.getElementById('overall-progress-val'),
+    fill: document.getElementById('overall-progress-fill'),
+    status: document.getElementById('progress-status-text'),
   },
 };
 
@@ -34,6 +34,7 @@ const UI = {
 const State = {
   config: { outputDir: '', ids: '', folderStructure: 'by_id', includeCompanyName: false },
   saveTimeout: null,
+  lastProgress: 0,
 };
 
 /**
@@ -45,16 +46,16 @@ const App = {
     const version = await window.electronAPI.getAppVersion();
     const versionEl = document.getElementById('about-icon');
     if (versionEl) versionEl.textContent = `v${version}`;
-    
+
     if (State.config.outputDir) UI.inputs.outputDir.value = State.config.outputDir;
     if (State.config.ids) UI.inputs.ids.value = State.config.ids;
     if (State.config.folderStructure) UI.inputs.folderStructure.value = State.config.folderStructure;
-    
+
     if (State.config.includeCompanyName !== undefined) {
       const radio = document.querySelector(`input[name="include-company-name"][value="${State.config.includeCompanyName}"]`);
       if (radio) radio.checked = true;
     }
-    
+
     this.bindEvents();
     this.bindIPC();
   },
@@ -70,7 +71,7 @@ const App = {
     UI.buttons.stop.addEventListener('click', this.handleStop.bind(this));
     UI.buttons.copyLog.addEventListener('click', this.handleCopyLog.bind(this));
     UI.buttons.clearLog.addEventListener('click', this.handleClearLog.bind(this));
-    
+
     const versionEl = document.getElementById('about-icon');
     if (versionEl) {
       versionEl.addEventListener('click', () => {
@@ -83,7 +84,7 @@ const App = {
   },
 
   bindIPC() {
-    window.electronAPI.onLog((msg) => this.addLog(msg));
+    window.electronAPI.onLog((msg, type) => this.addLog(msg, type));
     window.electronAPI.onProgress((data) => this.updateProgress(data));
   },
 
@@ -92,10 +93,10 @@ const App = {
     State.saveTimeout = setTimeout(async () => {
       State.config.ids = UI.inputs.ids.value;
       State.config.folderStructure = UI.inputs.folderStructure.value;
-      
+
       const checkedRadio = document.querySelector('input[name="include-company-name"]:checked');
       State.config.includeCompanyName = checkedRadio ? checkedRadio.value === 'true' : false;
-      
+
       await window.electronAPI.saveConfig(JSON.parse(JSON.stringify(State.config)));
     }, 1000);
   },
@@ -116,7 +117,7 @@ const App = {
 
     const ids = rawIds.split(/[,\n]/).map(id => id.trim().toUpperCase()).filter(id => id.length > 0);
     const invalidIds = ids.filter(id => !this.isValidTaiwanID(id));
-    
+
     if (invalidIds.length > 0) {
       return this.addLog(`無效的身分證字號，請檢查: ${invalidIds.join(', ')}`, 'error');
     }
@@ -126,16 +127,20 @@ const App = {
     }
 
     this.setUIState(true);
+    State.lastProgress = 0;
+    UI.progress.val.textContent = '0%';
+    UI.progress.fill.style.width = '0%';
+    UI.progress.status.textContent = '(帳號: 0/0 | 投票: 0/0 | 截圖: 0/0)';
     this.addLog(`開始執行，共 ${ids.length} 個帳號`, 'info');
 
     try {
       const sanitizedIds = JSON.parse(JSON.stringify(ids));
       const checkedRadio = document.querySelector('input[name="include-company-name"]:checked');
       const includeCompanyName = checkedRadio ? checkedRadio.value === 'true' : false;
-      
+
       const result = await window.electronAPI.startVoting(
-        sanitizedIds, 
-        UI.inputs.outputDir.value || '', 
+        sanitizedIds,
+        UI.inputs.outputDir.value || '',
         UI.inputs.folderStructure.value,
         includeCompanyName
       );
@@ -177,20 +182,39 @@ const App = {
   },
 
   updateProgress(data) {
-    try {
-      const updateBar = (type, current, total) => {
-        const bar = UI.progress[type];
-        if (!bar) return;
-        bar.val.textContent = `${current}/${total}`;
-        bar.fill.style.width = total > 0 ? `${(current / total) * 100}%` : '0%';
-      };
+    const { id, vote, screenshot, status } = data;
+    if (!id || id.total <= 0) return;
 
-      if (data.id) updateBar('id', data.id.current, data.id.total);
-      if (data.vote) updateBar('vote', data.vote.current, data.vote.total);
-      if (data.screenshot) updateBar('shot', data.screenshot.current, data.screenshot.total);
-    } catch (e) {
-      console.error('Progress update error:', e);
+    const base = Math.max(0, id.current - 1);
+    let accountProgress = 0;
+    
+    if (status === 'finished') {
+      accountProgress = 1;
+    } else if (status === 'initializing') {
+      accountProgress = 0;
+    } else {
+      const hasVote = vote?.total > 0;
+      const hasShot = screenshot?.total > 0;
+
+      if (hasVote && hasShot) {
+        accountProgress = (vote.current / vote.total * 0.5) + (screenshot.current / screenshot.total * 0.5);
+      } else if (hasVote) {
+        accountProgress = vote.current / vote.total;
+      } else if (hasShot) {
+        accountProgress = screenshot.current / screenshot.total;
+      }
     }
+    
+    let totalPercent = Math.min(100, Math.max(0, Math.floor(((base + accountProgress) / id.total) * 100)));
+
+    if (totalPercent < State.lastProgress) {
+      totalPercent = State.lastProgress;
+    }
+    State.lastProgress = totalPercent;
+
+    UI.progress.status.textContent = `(帳號: ${id?.current || 0}/${id?.total || 0} | 投票: ${vote?.globalCurrent || 0}/${vote?.globalTotal || 0} | 截圖: ${screenshot?.globalCurrent || 0}/${screenshot?.globalTotal || 0})`;
+    UI.progress.val.textContent = `${totalPercent}%`;
+    UI.progress.fill.style.width = `${totalPercent}%`;
   },
 
   setUIState(isRunning) {
@@ -224,8 +248,8 @@ const App = {
   },
 
   isMaintenanceTime() {
-    const taiwanHours = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" })).getHours();
-    return taiwanHours >= 0 && taiwanHours < 7;
+    const taiwanHour = (new Date().getUTCHours() + 8) % 24;
+    return taiwanHour >= 0 && taiwanHour < 7;
   },
 };
 

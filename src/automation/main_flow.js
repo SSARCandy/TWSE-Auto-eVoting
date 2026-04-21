@@ -6,19 +6,19 @@ const logout = require('./logout');
 const CONSTANTS = require('../constants');
 const { randomDelay, waitForNavigation, isMaintenanceTime, isScreenshotExists } = require('./utils');
 
-async function processCompany(webContents, id, company, context, sendLog, sendProgress, isStopRequested) {
-  const { pendingCodes, outputDir, folderStructure, includeCompanyName, i, idsLength, totalVotes, totalShots } = context;
+async function processCompany(webContents, id, company, context, sendLog, emitProgress, isStopRequested) {
+  const { pendingCodes, outputDir, folderStructure, includeCompanyName, i, idsLength, sessionStats } = context;
   const { code } = company;
 
   if (isScreenshotExists(id, code, outputDir, folderStructure)) {
     sendLog(`[清單] ${code} 已有截圖，跳過。`);
-    if (pendingCodes.includes(code)) context.currentVote++;
+    if (pendingCodes.includes(code)) {
+      context.currentVote++;
+      sessionStats.voted++;
+    }
     context.currentShot++;
-    sendProgress({ 
-      id: { current: i + 1, total: idsLength }, 
-      vote: { current: context.currentVote, total: totalVotes }, 
-      screenshot: { current: context.currentShot, total: totalShots }, 
-    });
+    sessionStats.screenshoted++;
+    emitProgress();
     return;
   }
 
@@ -35,12 +35,8 @@ async function processCompany(webContents, id, company, context, sendLog, sendPr
       sendLog(`[投票] ${code} 成功。`);
 
       context.currentVote++;
-      if (context.sessionStats) context.sessionStats.voted++;
-      sendProgress({ 
-        id: { current: i + 1, total: idsLength }, 
-        vote: { current: context.currentVote, total: totalVotes }, 
-        screenshot: { current: context.currentShot, total: totalShots }, 
-      });
+      sessionStats.voted++;
+      emitProgress();
 
       sendLog('[導航] 返回查詢...');
       const waitGo = waitForNavigation(webContents);
@@ -63,11 +59,8 @@ async function processCompany(webContents, id, company, context, sendLog, sendPr
       sendLog(`[導航] 已投過，在查詢頁...`);
       if (pendingCodes.includes(code)) {
         context.currentVote++;
-        sendProgress({ 
-          id: { current: i + 1, total: idsLength }, 
-          vote: { current: context.currentVote, total: totalVotes }, 
-          screenshot: { current: context.currentShot, total: totalShots }, 
-        });
+        sessionStats.voted++;
+        emitProgress();
       }
     }
 
@@ -77,12 +70,8 @@ async function processCompany(webContents, id, company, context, sendLog, sendPr
     sendLog(`[截圖] 已存: ${path.basename(screenshotPath)}`);
 
     context.currentShot++;
-    if (context.sessionStats) context.sessionStats.screenshoted++;
-    sendProgress({ 
-      id: { current: i + 1, total: idsLength }, 
-      vote: { current: context.currentVote, total: totalVotes }, 
-      screenshot: { current: context.currentShot, total: totalShots }, 
-    });
+    sessionStats.screenshoted++;
+    emitProgress();
 
   } catch (procError) {
     if (isStopRequested()) return;
@@ -94,8 +83,41 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
   const { outputDir, folderStructure, includeCompanyName } = config;
   const maskedId = `${id.substring(0, 4)}****${id.substring(8)}`;
 
+  const context = {
+    pendingCodes: [],
+    outputDir,
+    folderStructure,
+    includeCompanyName,
+    i,
+    idsLength: ids.length,
+    totalVotes: 0,
+    totalShots: 0,
+    currentVote: 0,
+    currentShot: 0,
+    sessionStats,
+  };
+
+  const emitProgress = (status = 'processing') => {
+    sendProgress({ 
+      id: { current: i + 1, total: ids.length }, 
+      vote: { 
+        current: context.currentVote, 
+        total: context.totalVotes, 
+        globalCurrent: sessionStats.voted, 
+        globalTotal: sessionStats.totalVotes, 
+      }, 
+      screenshot: { 
+        current: context.currentShot, 
+        total: context.totalShots, 
+        globalCurrent: sessionStats.screenshoted, 
+        globalTotal: sessionStats.totalShots, 
+      },
+      status,
+    });
+  };
+
   sendLog(`[系統] 處理: ${maskedId}`);
-  sendProgress({ id: { current: i, total: ids.length }, vote: { current: 0, total: 0 }, screenshot: { current: 0, total: 0 } });
+  emitProgress('initializing');
 
   try {
     sendLog('[系統] 清空 Session...');
@@ -105,6 +127,7 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
     const loggedIn = await login.execute(webContents, id, sendLog);
     if (!loggedIn) {
       sendLog(`[登入] ${maskedId} 失敗，跳過。`, 'error');
+      emitProgress('finished');
       return;
     }
 
@@ -115,31 +138,20 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
     const votedNeedScreenshot = companies.filter(c => c.status === 'voted' && !isScreenshotExists(id, c.code, outputDir, folderStructure));
     const targetCompanies = [...pendingCompanies, ...votedNeedScreenshot];
 
-    const context = {
-      pendingCodes: pendingCompanies.map(c => c.code),
-      outputDir,
-      folderStructure,
-      includeCompanyName,
-      i,
-      idsLength: ids.length,
-      totalVotes: pendingCompanies.length,
-      totalShots: targetCompanies.length,
-      currentVote: 0,
-      currentShot: 0,
-      sessionStats,
-    };
+    context.pendingCodes = pendingCompanies.map(c => c.code);
+    context.totalVotes = pendingCompanies.length;
+    context.totalShots = targetCompanies.length;
+    
+    sessionStats.totalVotes += context.totalVotes;
+    sessionStats.totalShots += context.totalShots;
 
     sendLog(`[清單] 需投 ${context.totalVotes}，需截 ${votedNeedScreenshot.length}。`);
-    sendProgress({ 
-      id: { current: i + 1, total: ids.length }, 
-      vote: { current: context.currentVote, total: context.totalVotes }, 
-      screenshot: { current: context.currentShot, total: context.totalShots }, 
-    });
+    emitProgress();
 
     for (const company of targetCompanies) {
       if (isStopRequested()) break;
 
-      await processCompany(webContents, id, company, context, sendLog, sendProgress, isStopRequested);
+      await processCompany(webContents, id, company, context, sendLog, emitProgress, isStopRequested);
 
       if (!isStopRequested()) await voting.navigateBackToList(webContents, sendLog);
     }
@@ -159,8 +171,10 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
     await randomDelay(1000, 2000);
 
     sendLog(`[系統] ${maskedId} 結束。`, 'info');
+    emitProgress('finished');
   } catch (error) {
     sendLog(`[系統] ${maskedId} 錯誤: ${error.message}`, 'error');
+    emitProgress('finished');
   }
 }
 
@@ -170,7 +184,7 @@ async function run(webContents, ids, sendLog, sendProgress, isStopRequested, out
     return { voted: 0, screenshoted: 0 };
   }
 
-  const sessionStats = { voted: 0, screenshoted: 0 };
+  const sessionStats = { voted: 0, screenshoted: 0, totalVotes: 0, totalShots: 0 };
   const config = { outputDir, folderStructure, includeCompanyName };
 
   for (let i = 0; i < ids.length; i++) {

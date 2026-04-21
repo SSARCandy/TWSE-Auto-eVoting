@@ -103,6 +103,40 @@ function isScreenshotExists(nationalId, code, outputDir, folderStructure = 'by_i
   return files.some(f => f.startsWith(prefix));
 }
 
+/**
+ * Calculates unified progress percentage (0-100).
+ * 
+ * @param {object} data Progress data from sendProgress
+ * @returns {number} 0-100 percentage
+ */
+function calculateProgress(data) {
+  const { id, vote, screenshot, status } = data;
+  if (!id || id.total <= 0) return 0;
+
+  const base = Math.max(0, id.current - 1);
+  let accountProgress = 0;
+
+  if (status === 'finished') {
+    accountProgress = 1;
+  } else if (status === 'initializing') {
+    accountProgress = 0;
+  } else {
+    const hasVote = vote && vote.total > 0;
+    const hasShot = screenshot && screenshot.total > 0;
+
+    if (hasVote && hasShot) {
+      accountProgress = (vote.current / vote.total * 0.5) + (screenshot.current / screenshot.total * 0.5);
+    } else if (hasVote) {
+      accountProgress = vote.current / vote.total;
+    } else if (hasShot) {
+      accountProgress = screenshot.current / screenshot.total;
+    }
+  }
+
+  const percent = Math.floor(((base + accountProgress) / id.total) * 100);
+  return Math.min(100, Math.max(0, isNaN(percent) ? 0 : percent));
+}
+
 module.exports = {
   delay,
   randomDelay,
@@ -110,4 +144,5 @@ module.exports = {
   safeExecute,
   isMaintenanceTime,
   isScreenshotExists,
+  calculateProgress,
 };
