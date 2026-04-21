@@ -58,7 +58,7 @@ function createBrowserView() {
   });
 
   mainWindow.setBrowserView(browserView);
-  
+
   const updateBounds = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const { width, height } = mainWindow.getContentBounds();
@@ -68,6 +68,11 @@ function createBrowserView() {
   updateBounds();
   mainWindow.on('resize', updateBounds);
   browserView.webContents.on('before-input-event', handleDevToolsShortcut(browserView.webContents));
+
+  browserView.webContents.on('dom-ready', () => {
+    browserView.webContents.insertCSS('::-webkit-scrollbar { display: none; }');
+  });
+
   browserView.webContents.loadURL(CONSTANTS.URLS.LOGIN);
 }
 
@@ -118,7 +123,7 @@ ipcMain.handle('start-voting', async (event, params) => {
   const { ids, outputDir, folderStructure, includeCompanyName } = params;
   stopRequested = false;
   const automation = require('./src/automation/main_flow');
-  
+
   const sendLog = (msg) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send('log', String(msg));
@@ -127,7 +132,7 @@ ipcMain.handle('start-voting', async (event, params) => {
   const sendProgress = (progress) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send('progress', JSON.parse(JSON.stringify(progress)));
-    
+
     const { id, screenshot } = progress;
     if (!id || id.total <= 0) return;
 
@@ -136,19 +141,19 @@ ipcMain.handle('start-voting', async (event, params) => {
     const screenshotProgress = hasScreenshot ? (screenshot.current / screenshot.total) : 0;
     const percent = Math.floor(((base + screenshotProgress) / id.total) * 100);
     const safePercent = Math.min(100, Math.max(0, isNaN(percent) ? 0 : percent));
-    
+
     mainWindow.setTitle(`(${safePercent}%) 股東會投票幫手`);
   };
 
   try {
     const stats = await automation.run(
-      browserView.webContents, 
-      ids, 
-      sendLog, 
-      sendProgress, 
-      () => stopRequested, 
-      outputDir, 
-      folderStructure, 
+      browserView.webContents,
+      ids,
+      sendLog,
+      sendProgress,
+      () => stopRequested,
+      outputDir,
+      folderStructure,
       includeCompanyName
     );
 
@@ -159,26 +164,26 @@ ipcMain.handle('start-voting', async (event, params) => {
     sendLog(`[系統] 完成。${msg}`);
 
     if (!mainWindow.isFocused() && Notification.isSupported()) {
-      new Notification({ 
-        title: '投票完成', 
-        body: msg, 
-        icon: path.join(__dirname, 'assets/icons/icon.png'), 
+      new Notification({
+        title: '投票完成',
+        body: msg,
+        icon: path.join(__dirname, 'assets/icons/icon.png'),
       }).show();
     }
-    
+
     return { success: true };
   } catch (error) {
     if (!mainWindow || mainWindow.isDestroyed()) return { success: false, error: error.message };
 
     mainWindow.setTitle('股東會投票幫手');
     if (!mainWindow.isFocused() && Notification.isSupported()) {
-      new Notification({ 
-        title: '投票錯誤', 
-        body: error.message, 
-        icon: path.join(__dirname, 'assets/icons/icon.png'), 
+      new Notification({
+        title: '投票錯誤',
+        body: error.message,
+        icon: path.join(__dirname, 'assets/icons/icon.png'),
       }).show();
     }
-    
+
     return { success: false, error: error.message };
   }
 });
@@ -214,10 +219,10 @@ ipcMain.handle('open-external', async (event, url) => {
   return { success: true };
 });
 
-ipcMain.handle('stop-voting', () => { 
-  stopRequested = true; 
-  if (browserView && browserView.webContents) {
+ipcMain.handle('stop-voting', () => {
+  stopRequested = true;
+  if (browserView && browserView.webContents && !browserView.webContents.isDestroyed()) {
     browserView.webContents.stop();
   }
-  return { success: true }; 
+  return { success: true };
 });
