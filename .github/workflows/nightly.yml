@@ -13,6 +13,12 @@ jobs:
   build:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
     strategy:
       matrix:
         os: [windows-latest, macos-latest]
@@ -56,6 +62,9 @@ jobs:
     name: Update Nightly Release
     needs: build
     runs-on: ubuntu-latest
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4

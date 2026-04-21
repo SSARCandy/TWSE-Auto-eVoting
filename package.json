@@ -41,7 +41,10 @@
         "dmg"
       ],
       "icon": "assets/icons/icon.icns",
-      "category": "public.app-category.utilities"
+      "category": "public.app-category.utilities",
+      "dmg": {
+        "title": "股東會投票幫手 v${version}"
+      }
     },
     "files": [
       "main.js",
