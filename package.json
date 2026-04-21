@@ -26,7 +26,7 @@
   "build": {
     "appId": "com.ssarcandy.twse-auto-evoting",
     "productName": "TWSE Auto eVoting",
-    "artifactName": "TWSE-Auto-eVoting-v${version}.${ext}",
+    "artifactName": "股東會投票幫手-v${version}.${ext}",
     "directories": {
       "output": "dist"
     },
