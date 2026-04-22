@@ -14,9 +14,9 @@ const { delay } = require('./utils');
 async function execute(webContents, nationalId, company, outputDir, folderStructure = 'by_id', includeCompanyName = false) {
   const baseDir = outputDir || path.join(app.getPath('documents'), '投票證明');
   const dir = folderStructure === 'flat' ? baseDir : path.join(baseDir, nationalId);
-  
+
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  
+
   let filename = `${nationalId}_${company.code}`;
   if (includeCompanyName && company.name) {
     // Sanitize company name for filesystem
@@ -24,7 +24,7 @@ async function execute(webContents, nationalId, company, outputDir, folderStruct
     filename += `_${safeName}`;
   }
   filename += '.png';
-  
+
   const filepath = path.join(dir, filename);
 
   // Use executeJavaScript to scroll the barcode block into view before capturing
@@ -47,48 +47,45 @@ async function execute(webContents, nationalId, company, outputDir, folderStruct
   try {
     image = await webContents.capturePage();
     if (image.isEmpty()) throw new Error('Screenshot empty');
-    fs.writeFileSync(filepath, image.toPNG());
   } catch (err) {
     const { BrowserWindow } = require('electron');
     const win = BrowserWindow.getAllWindows()[0];
-    if (win) {
-      const isMinimized = win.isMinimized();
-      const isVisible = win.isVisible();
-      
-      let originalOpacity, originalFocusable;
+    if (!win) throw err;
+
+    const isMinimized = win.isMinimized();
+    const isVisible = win.isVisible();
+
+    let originalOpacity, originalFocusable;
+    if (isMinimized || !isVisible) {
+      originalOpacity = win.getOpacity();
+      originalFocusable = win.isFocusable();
+
+      // Prevent stealing focus and make it invisible
+      win.setOpacity(0);
+      win.setFocusable(false);
+    }
+
+    if (isMinimized) win.restore();
+    if (!isVisible) win.showInactive();
+
+    // Wait for rendering surface to be allocated
+    await delay(500);
+
+    try {
+      image = await webContents.capturePage();
+      if (image.isEmpty()) throw new Error('Still empty');
+    } finally {
+      if (isMinimized) win.minimize();
+      else if (!isVisible) win.hide();
+
       if (isMinimized || !isVisible) {
-        originalOpacity = win.getOpacity();
-        originalFocusable = win.isFocusable();
-        
-        // Prevent stealing focus and make it invisible
-        win.setOpacity(0);
-        win.setFocusable(false);
+        win.setOpacity(originalOpacity);
+        win.setFocusable(originalFocusable);
       }
-      
-      if (isMinimized) win.restore();
-      if (!isVisible) win.showInactive();
-      
-      // Wait for rendering surface to be allocated
-      await delay(500); 
-      
-      try {
-        image = await webContents.capturePage();
-        if (image.isEmpty()) throw new Error('Still empty');
-        fs.writeFileSync(filepath, image.toPNG());
-      } finally {
-        if (isMinimized) win.minimize();
-        else if (!isVisible) win.hide();
-        
-        if (isMinimized || !isVisible) {
-          win.setOpacity(originalOpacity);
-          win.setFocusable(originalFocusable);
-        }
-      }
-    } else {
-      throw err;
     }
   }
-  
+
+  fs.writeFileSync(filepath, image.toPNG());
   return filepath;
 }
 
