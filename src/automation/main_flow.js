@@ -7,10 +7,10 @@ const CONSTANTS = require('../constants');
 const { randomDelay, waitForNavigation, isMaintenanceTime, isScreenshotExists } = require('./utils');
 
 async function processCompany(webContents, id, company, context, sendLog, emitProgress, isStopRequested) {
-  const { pendingCodes, outputDir, folderStructure, includeCompanyName, i, idsLength, sessionStats } = context;
+  const { pendingCodes, outputDir, folderStructure, filenamePattern, i, idsLength, sessionStats } = context;
   const { code } = company;
 
-  if (isScreenshotExists(id, code, outputDir, folderStructure)) {
+  if (isScreenshotExists(id, company, outputDir, folderStructure)) {
     sendLog(`[清單] ${code} 已有截圖，跳過。`);
     if (pendingCodes.includes(code)) {
       context.currentVote++;
@@ -66,7 +66,7 @@ async function processCompany(webContents, id, company, context, sendLog, emitPr
 
     if (isStopRequested()) return;
     sendLog(`[截圖] 擷取 ${code} 證明...`);
-    const screenshotPath = await screenshot.execute(webContents, id, company, outputDir, folderStructure, includeCompanyName);
+    const screenshotPath = await screenshot.execute(webContents, id, company, outputDir, folderStructure, filenamePattern);
     sendLog(`[截圖] 已存: ${path.basename(screenshotPath)}`);
 
     context.currentShot++;
@@ -80,14 +80,14 @@ async function processCompany(webContents, id, company, context, sendLog, emitPr
 }
 
 async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopRequested, config, sessionStats) {
-  const { outputDir, folderStructure, includeCompanyName } = config;
+  const { outputDir, folderStructure, filenamePattern } = config;
   const maskedId = `${id.substring(0, 4)}****${id.substring(8)}`;
 
   const context = {
     pendingCodes: [],
     outputDir,
     folderStructure,
-    includeCompanyName,
+    filenamePattern,
     i,
     idsLength: ids.length,
     totalVotes: 0,
@@ -135,7 +135,7 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
     const companies = await voting.getCompanyList(webContents, sendLog);
 
     const pendingCompanies = companies.filter(c => c.status === 'pending');
-    const votedNeedScreenshot = companies.filter(c => c.status === 'voted' && !isScreenshotExists(id, c.code, outputDir, folderStructure));
+    const votedNeedScreenshot = companies.filter(c => c.status === 'voted' && !isScreenshotExists(id, c, outputDir, folderStructure));
     const targetCompanies = [...pendingCompanies, ...votedNeedScreenshot];
 
     context.pendingCodes = pendingCompanies.map(c => c.code);
@@ -178,14 +178,14 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
   }
 }
 
-async function run(webContents, ids, sendLog, sendProgress, isStopRequested, outputDir, folderStructure = 'by_id', includeCompanyName = false) {
+async function run(webContents, ids, sendLog, sendProgress, isStopRequested, outputDir, folderStructure = 'by_id', filenamePattern = '{id}_{code}') {
   if (isMaintenanceTime()) {
     sendLog('[系統] 維護時間 (00-07)，停止。', 'error');
     return { voted: 0, screenshoted: 0 };
   }
 
   const sessionStats = { voted: 0, screenshoted: 0, totalVotes: 0, totalShots: 0 };
-  const config = { outputDir, folderStructure, includeCompanyName };
+  const config = { outputDir, folderStructure, filenamePattern };
 
   for (let i = 0; i < ids.length; i++) {
     if (isStopRequested()) {

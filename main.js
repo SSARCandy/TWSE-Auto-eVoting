@@ -78,12 +78,21 @@ app.setAppUserModelId('股東會投票幫手');
 
 function getConfig() {
   const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
-  const defaultConfig = { outputDir: '', ids: '', folderStructure: 'by_id', includeCompanyName: false };
+  const defaultConfig = { outputDir: '', ids: '', folderStructure: 'by_id', filenamePattern: '{id}_{code}' };
   if (!fs.existsSync(CONFIG_PATH)) return defaultConfig;
 
   try {
     const data = fs.readFileSync(CONFIG_PATH, 'utf8');
-    return { ...defaultConfig, ...JSON.parse(data) };
+    const config = JSON.parse(data);
+    if (!config) return defaultConfig;
+    
+    // Migrate old includeCompanyName if exists
+    if (config.filenamePattern === undefined && config.includeCompanyName !== undefined) {
+      config.filenamePattern = config.includeCompanyName ? '{id}_{code}_{name}' : '{id}_{code}';
+      delete config.includeCompanyName;
+    }
+
+    return { ...defaultConfig, ...config };
   } catch (e) {
     console.error('Failed to read config:', e);
     return defaultConfig;
@@ -188,7 +197,7 @@ app.on('window-all-closed', () => {
 ipcMain.handle('get-app-version', () => APP_VERSION);
 
 ipcMain.handle('start-voting', async (event, params) => {
-  const { ids, outputDir, folderStructure, includeCompanyName } = params;
+  const { ids, outputDir, folderStructure, filenamePattern } = params;
   stopRequested = false;
   const automation = require('./src/automation/main_flow');
   const { calculateProgress } = require('./src/automation/utils');
@@ -215,7 +224,7 @@ ipcMain.handle('start-voting', async (event, params) => {
       () => stopRequested,
       outputDir,
       folderStructure,
-      includeCompanyName
+      filenamePattern
     );
 
     if (!mainWindow || mainWindow.isDestroyed()) return { success: true };

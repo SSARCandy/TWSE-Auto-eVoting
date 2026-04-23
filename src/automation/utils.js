@@ -89,18 +89,35 @@ function isMaintenanceTime() {
   return taiwanHour >= 0 && taiwanHour < 7;
 }
 
+const dirCache = new Map();
+
 /**
- * Checks if a screenshot proof already exists for a given ID and stock code.
+ * Checks if a screenshot proof already exists for a given ID and stock code/company.
+ * Uses fuzzy matching to find any file containing both ID and Code.
  */
-function isScreenshotExists(nationalId, code, outputDir, folderStructure = 'by_id') {
+function isScreenshotExists(nationalId, company, outputDir, folderStructure = 'by_id') {
   const baseDir = outputDir || path.join(app.getPath('documents'), '投票證明');
   const dir = folderStructure === 'flat' ? baseDir : path.join(baseDir, nationalId);
 
   if (!fs.existsSync(dir)) return false;
 
-  const files = fs.readdirSync(dir);
-  const prefix = `${nationalId}_${code}`;
-  return files.some(f => f.startsWith(prefix));
+  const code = typeof company === 'string' ? company : company.code;
+  
+  // Performance: cache directory file list per execution loop
+  if (!dirCache.has(dir)) {
+    dirCache.set(dir, fs.readdirSync(dir));
+    // Clear cache after a short delay to ensure fresh data for next run but fast for current loop
+    setTimeout(() => dirCache.delete(dir), 5000);
+  }
+  
+  const files = dirCache.get(dir);
+  
+  // Fuzzy match: check if segments (split by _) match both nationalId AND company code exactly
+  return files.some(file => {
+    if (!file.endsWith('.png')) return false;
+    const parts = file.replace('.png', '').split('_');
+    return parts.includes(nationalId) && parts.includes(code);
+  });
 }
 
 /**

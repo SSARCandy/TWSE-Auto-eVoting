@@ -4,27 +4,42 @@ const { app } = require('electron');
 const { delay } = require('./utils');
 
 /**
+ * Generates a screenshot filename based on pattern.
+ * Pattern supports: {id}, {code}, {name}
+ * @param {string} pattern - Filename pattern.
+ * @param {string} nationalId - User's national ID.
+ * @param {object} company - Company object with 'code' and 'name'.
+ * @returns {string} The formatted filename.
+ */
+function formatFilename(pattern, nationalId, company) {
+  if (!pattern) pattern = '{id}_{code}';
+
+  // Sanitize company name for filesystem (remove \/:*?"<>| and control characters)
+  const safeName = (company.name || '').replace(/[\\\\/:*?"<>|\\x00-\\x1F\\x7F]/g, '_');
+
+  return pattern
+    .replace(/{id}/g, nationalId)
+    .replace(/{code}/g, company.code)
+    .replace(/{name}/g, safeName);
+}
+
+/**
  * Captures a screenshot of the voting proof page.
  * @param {object} webContents - The Electron webContents instance.
  * @param {string} nationalId - The user's national ID.
  * @param {object} company - The company object containing 'code'.
  * @param {string} outputDir - The base output directory.
+ * @param {string} folderStructure - Folder structure type ('by_id' or 'flat').
+ * @param {string} filenamePattern - Pattern for the filename.
  * @returns {string} The absolute path to the saved screenshot.
  */
-async function execute(webContents, nationalId, company, outputDir, folderStructure = 'by_id', includeCompanyName = false) {
+async function execute(webContents, nationalId, company, outputDir, folderStructure = 'by_id', filenamePattern = '{id}_{code}') {
   const baseDir = outputDir || path.join(app.getPath('documents'), '投票證明');
   const dir = folderStructure === 'flat' ? baseDir : path.join(baseDir, nationalId);
 
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  let filename = `${nationalId}_${company.code}`;
-  if (includeCompanyName && company.name) {
-    // Sanitize company name for filesystem
-    const safeName = company.name.replace(/[\\\\/:*?"<>|]/g, '_');
-    filename += `_${safeName}`;
-  }
-  filename += '.png';
-
+  const filename = `${formatFilename(filenamePattern, nationalId, company)}.png`;
   const filepath = path.join(dir, filename);
 
   // Use executeJavaScript to scroll the barcode block into view before capturing
@@ -89,4 +104,4 @@ async function execute(webContents, nationalId, company, outputDir, folderStruct
   return filepath;
 }
 
-module.exports = { execute };
+module.exports = { execute, formatFilename };
