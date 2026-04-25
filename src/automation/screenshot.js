@@ -49,13 +49,14 @@ async function execute(webContents, nationalId, company, outputDir, folderStruct
                                document.querySelector('#barCodeAccountNoAndStockId')?.closest('div');
                                
       if (barcodeContainer) {
-        barcodeContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Use 'instant' instead of 'smooth' to prevent motion blur during capture
+        barcodeContainer.scrollIntoView({ behavior: 'instant', block: 'center' });
       }
     })()
   `);
 
-  // Wait a bit after scrolling
-  await delay(500);
+  // Wait for font rendering to settle after scroll
+  await delay(800);
 
   // Capture the entire visible page
   let image;
