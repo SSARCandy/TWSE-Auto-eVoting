@@ -65,13 +65,18 @@ async function processCompany(webContents, id, company, context, sendLog, emitPr
     }
 
     if (isStopRequested()) return;
-    sendLog(`[截圖] 擷取 ${code} 證明...`);
-    const screenshotPath = await screenshot.execute(webContents, id, company, outputDir, folderStructure, filenamePattern);
     
-    if (screenshotPath) {
-      sendLog(`[截圖] 已存: ${path.basename(screenshotPath)}`);
+    if (company.hasEGift) {
+      sendLog(`[截圖] ${code} 符合eGift，跳過截圖。`);
     } else {
-      sendLog(`[截圖] 無條碼，跳過 ${code}。`, 'error');
+      sendLog(`[截圖] 擷取 ${code} 證明...`);
+      const screenshotPath = await screenshot.execute(webContents, id, company, outputDir, folderStructure, filenamePattern);
+      
+      if (screenshotPath) {
+        sendLog(`[截圖] 已存: ${path.basename(screenshotPath)}`);
+      } else {
+        sendLog(`[截圖] 無條碼，跳過 ${code}。`, 'error');
+      }
     }
 
     context.currentShot++;
@@ -140,7 +145,7 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
     const companies = await voting.getCompanyList(webContents, sendLog);
 
     const pendingCompanies = companies.filter(c => c.status === 'pending');
-    const votedNeedScreenshot = companies.filter(c => c.status === 'voted' && !isScreenshotExists(id, c, outputDir, folderStructure));
+    const votedNeedScreenshot = companies.filter(c => c.status === 'voted' && !isScreenshotExists(id, c, outputDir, folderStructure) && !c.hasEGift);
     const targetCompanies = [...pendingCompanies, ...votedNeedScreenshot];
 
     context.pendingCodes = pendingCompanies.map(c => c.code);

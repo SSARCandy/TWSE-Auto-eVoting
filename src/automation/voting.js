@@ -51,10 +51,17 @@ async function getCompanyList(webContents, sendLog) {
             const links = Array.from(row.querySelectorAll('a.c-actLink, a.u-link'));
             const hasVote = links.some(a => ['投票', 'Vote'].some(kw => a.innerText.includes(kw)));
             
+            let hasEGift = false;
+            if (cells.length > 4) {
+                // innerText of 5th cell contains 'Y' if eGift is eligible
+                hasEGift = cells[4].innerText.includes('Y') || cells[4].innerHTML.includes('Y');
+            }
+            
             return {
                 code,
                 name,
                 status: hasVote ? 'pending' : 'voted',
+                hasEGift,
                 rowIndex: Array.from(row.parentNode.children).indexOf(row)
             };
         }).filter(c => c !== null);
