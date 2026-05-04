@@ -85,7 +85,7 @@ function getConfig() {
     const data = fs.readFileSync(CONFIG_PATH, 'utf8');
     const config = JSON.parse(data);
     if (!config) return defaultConfig;
-    
+
     // Migrate old includeCompanyName if exists
     if (config.filenamePattern === undefined && config.includeCompanyName !== undefined) {
       config.filenamePattern = config.includeCompanyName ? '{id}_{code}_{name}' : '{id}_{code}';
@@ -153,6 +153,7 @@ function createWindow() {
     height: 850,
     minWidth: 900,
     minHeight: 850,
+    resizable: false,
     show: true,
     backgroundColor: '#1a1a2e',
     paintWhenInitiallyHidden: false,
