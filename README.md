@@ -1,8 +1,8 @@
 # TWSE Auto eVoting (股東會投票幫手)
 
-[![Nightly Build Release](https://github.com/SSARCandy/TWSE-eVoting/actions/workflows/nightly.yml/badge.svg)](https://github.com/SSARCandy/TWSE-eVoting/actions/workflows/nightly.yml)
-[![GitHub version](https://img.shields.io/github/v/release/SSARCandy/TWSE-eVoting)](https://github.com/SSARCandy/TWSE-eVoting/releases)
-[![GitHub Downloads](https://img.shields.io/github/downloads/SSARCandy/TWSE-Auto-eVoting/total?label=Downloads)](https://github.com/SSARCandy/TWSE-eVoting/releases)
+[![Nightly Build Release](https://github.com/SSARCandy/TWSE-Auto-eVoting/actions/workflows/nightly.yml/badge.svg)](https://github.com/SSARCandy/TWSE-Auto-eVoting/actions/workflows/nightly.yml)
+[![GitHub version](https://img.shields.io/github/v/release/SSARCandy/TWSE-Auto-eVoting)](https://github.com/SSARCandy/TWSE-Auto-eVoting/releases)
+[![GitHub Downloads](https://img.shields.io/github/downloads/SSARCandy/TWSE-Auto-eVoting/total?label=Downloads)](https://github.com/SSARCandy/TWSE-Auto-eVoting/releases)
 
 台灣股東會電子投票（股東e服務）全自動桌面工具。專為領取紀念品流程設計，一鍵完成多帳號登入、投票與截圖存證，取代手動操作。
 
@@ -31,7 +31,7 @@
 
 ## 📥 下載與執行
 
-前往 [Releases](https://github.com/SSARCandy/TWSE-eVoting/releases) 頁面：
+前往 [Releases](https://github.com/SSARCandy/TWSE-Auto-eVoting/releases) 頁面：
 - **Windows**: 下載 `.exe` 檔案。免安裝，點擊即可執行。
 - **macOS**: 下載 `.dmg` 檔案，將 App 拖曳至 Applications 資料夾。
 
