@@ -42,10 +42,12 @@ async function processCompany(webContents, id, company, context, sendLog, emitPr
       const waitGo = waitForNavigation(webContents);
       const clickedGo = await webContents.executeJavaScript(`(() => { const btn = document.getElementById('go'); if(btn){ btn.click(); return true; } return false; })()`);
       if (!clickedGo) {
-        sendLog('[導航] 無確認鈕，回上頁');
-        webContents.goBack();
+        sendLog('[導航] 無確認鈕，回列表');
+        await voting.navigateBackToList(webContents, sendLog);
+        await voting.ensureOnListPage(webContents, sendLog, true);
+      } else {
+        await waitGo;
       }
-      await waitGo;
       await randomDelay(200, 500);
 
       if (isStopRequested()) return;

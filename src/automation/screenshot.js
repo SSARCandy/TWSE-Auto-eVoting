@@ -105,9 +105,21 @@ async function execute(webContents, nationalId, company, outputDir, folderStruct
     // Wait for rendering surface to be allocated
     await delay(500);
 
+    let captured = false;
     try {
-      image = await webContents.capturePage();
-      if (image.isEmpty()) throw new Error('Still empty');
+      for (let retry = 0; retry < 3; retry++) {
+        try {
+          image = await webContents.capturePage();
+          if (image.isEmpty()) throw new Error('Still empty');
+          captured = true;
+          break;
+        } catch (captureErr) {
+          if (retry === 2) throw captureErr;
+          await delay(1000);
+        }
+      }
+      
+      if (!captured) throw new Error('Capture failed after retries');
     } finally {
       if (isMinimized) win.minimize();
       else if (!isVisible) win.hide();
