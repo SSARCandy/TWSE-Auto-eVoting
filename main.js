@@ -125,7 +125,11 @@ function createBrowserView() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
 
   browserView = new BrowserView({
-    webPreferences: { nodeIntegration: false, contextIsolation: true },
+    webPreferences: { 
+      nodeIntegration: false, 
+      contextIsolation: true,
+      backgroundThrottling: false,
+    },
   });
 
   mainWindow.setBrowserView(browserView);
@@ -163,6 +167,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false,
+      backgroundThrottling: false,
     },
     title: '股東會投票幫手',
   });

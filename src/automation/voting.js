@@ -174,6 +174,7 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false, 
         );
 
         if (submitBtn) {
+            await sleep(600 + Math.random() * 1000);
             submitBtn.click();
             return { type: 'submit', success: true };
         }
@@ -182,6 +183,7 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false, 
         const avgBtn = Array.from(document.querySelectorAll('a')).find(a => a.href?.includes('avarage') || a.href?.includes('average'));
         
         if (firstCandidateBox || avgBtn) {
+            await sleep(400 + Math.random() * 800);
             if (firstCandidateBox && !firstCandidateBox.checked) {
                 firstCandidateBox.click();
             }
@@ -199,10 +201,12 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false, 
             document.querySelectorAll('input[type="radio"]').forEach(r => groups.add(r.name));
             groups.forEach(groupName => {
                 const radio = document.querySelector(\`input[name="\${groupName}"][value="1"]\`);
-                if (radio) radio.click();
+                if (radio) {
+                    setTimeout(() => radio.click(), Math.random() * 500);
+                }
             });
         }
-        await sleep(300);
+        await sleep(500 + Math.random() * 500);
 
         const nextBtn = Array.from(document.querySelectorAll('button')).find(el => 
             el.getAttribute('onclick')?.includes('voteObj.checkVote()')
@@ -247,6 +251,9 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false, 
         `);
         if (modalText && typeof modalText === 'string' && !modalText.startsWith('ERROR:')) {
           sendLog(`[警告] 彈出提示: ${modalText}`, 'warning');
+          if (modalText.includes('驗證失敗')) {
+            throw new Error(`RECAPTCHA_FAILED: ${modalText}`);
+          }
           // If dialog is dismissed, it might not navigate, but we don't want to abort.
           // Breaking the loop will let it continue, and it will await the navigation (which might timeout if blocked).
         }

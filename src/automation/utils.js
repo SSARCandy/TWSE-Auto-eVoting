@@ -46,6 +46,7 @@ function waitForNavigation(webContents, timeoutMs = 30000) {
       if (!resolved) {
         resolved = true;
         webContents.removeListener('did-finish-load', onFinish);
+        webContents.removeListener('did-fail-load', onFail);
         resolve(false);
       }
     }, timeoutMs);
@@ -54,11 +55,23 @@ function waitForNavigation(webContents, timeoutMs = 30000) {
       if (!resolved) {
         resolved = true;
         clearTimeout(timeout);
+        webContents.removeListener('did-fail-load', onFail);
         resolve(true);
       }
     };
 
+    const onFail = (event, errorCode, errorDescription, validatedURL) => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        webContents.removeListener('did-finish-load', onFinish);
+        // We resolve false on failure to maintain compatibility with existing boolean check flow
+        resolve(false);
+      }
+    };
+
     webContents.once('did-finish-load', onFinish);
+    webContents.once('did-fail-load', onFail);
   });
 }
 

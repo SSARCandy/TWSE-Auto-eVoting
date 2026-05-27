@@ -94,19 +94,20 @@ async function execute(webContents, nationalId, company, outputDir, folderStruct
       originalOpacity = win.getOpacity();
       originalFocusable = win.isFocusable();
 
-      // Prevent stealing focus and make it invisible
+      // Prevent stealing focus and make it invisible to user but active for OS
       win.setOpacity(0);
       win.setFocusable(false);
     }
 
-    if (isMinimized) win.restore();
-    if (!isVisible) win.showInactive();
-
-    // Wait for rendering surface to be allocated
-    await delay(500);
-
-    let captured = false;
     try {
+      if (isMinimized) win.restore();
+      if (!isVisible) win.showInactive();
+
+      // Force a redraw and wait for rendering surface to be allocated
+      await webContents.executeJavaScript('window.dispatchEvent(new Event("resize"));');
+      await delay(800);
+
+      let captured = false;
       for (let retry = 0; retry < 3; retry++) {
         try {
           image = await webContents.capturePage();
@@ -115,7 +116,9 @@ async function execute(webContents, nationalId, company, outputDir, folderStruct
           break;
         } catch (captureErr) {
           if (retry === 2) throw captureErr;
-          await delay(1000);
+          // Force repaint again
+          await webContents.executeJavaScript('document.body.style.opacity = "0.99"; setTimeout(() => document.body.style.opacity = "1", 50);');
+          await delay(1200);
         }
       }
       
