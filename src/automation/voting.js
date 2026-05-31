@@ -65,8 +65,9 @@ async function getCompanyList(webContents, sendLog) {
             
             let hasEGift = false;
             if (cells.length > 4) {
-                // innerText of 5th cell contains 'Y' if eGift is eligible
-                hasEGift = cells[4].innerText.includes('Y') || cells[4].innerHTML.includes('Y');
+                // innerText of 5th cell contains 'Y' if eGift is eligible. 
+                // Do NOT use innerHTML as it may contain hidden comments with 'Y'.
+                hasEGift = cells[4].innerText.includes('Y');
             }
             
             return {
