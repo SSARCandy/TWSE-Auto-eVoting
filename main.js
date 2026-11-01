@@ -4,16 +4,33 @@ const fs = require('fs');
 
 const pkg = require('./package.json');
 const CONSTANTS = require('./src/constants');
+const automation = require('./src/automation/main_flow');
+const { calculateProgress } = require('./src/automation/utils');
 
 const APP_VERSION = pkg.version;
+const APP_TITLE = '股東會投票幫手';
+const ICON_PATH = path.join(__dirname, 'assets/icons/icon.png');
+const DEFAULT_CONFIG = { outputDir: '', ids: '', folderStructure: 'by_id', filenamePattern: '{id}_{code}' };
 
 let mainWindow;
 let browserView;
 let stopRequested = false;
 
+const isMainWindowAlive = () => mainWindow && !mainWindow.isDestroyed();
+
 function sendLog(msg, type = '') {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!isMainWindowAlive()) return;
   mainWindow.webContents.send('log', String(msg), type);
+}
+
+/**
+ * Shows a system notification, but only when the user is not looking at the app.
+ * @param {string} title
+ * @param {string} body
+ */
+function notifyIfUnfocused(title, body) {
+  if (mainWindow.isFocused() || !Notification.isSupported()) return;
+  new Notification({ title, body, icon: ICON_PATH }).show();
 }
 
 async function checkForUpdates() {
@@ -28,7 +45,14 @@ async function checkForUpdates() {
     req.on('response', (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
-      res.on('end', () => res.statusCode === 200 ? resolve(JSON.parse(data)) : reject(new Error(res.statusCode)));
+      res.on('end', () => {
+        if (res.statusCode !== 200) return reject(new Error(res.statusCode));
+        try {
+          resolve(JSON.parse(data));
+        } catch (err) {
+          reject(err);
+        }
+      });
     });
     req.on('error', reject);
     req.end();
@@ -74,17 +98,17 @@ function isNewerVersion(latest, current) {
 
 // Mask Electron User-Agent
 app.userAgentFallback = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-app.setAppUserModelId('股東會投票幫手');
+app.setAppUserModelId(APP_TITLE);
+
+const getConfigPath = () => path.join(app.getPath('userData'), 'config.json');
 
 function getConfig() {
-  const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
-  const defaultConfig = { outputDir: '', ids: '', folderStructure: 'by_id', filenamePattern: '{id}_{code}' };
-  if (!fs.existsSync(CONFIG_PATH)) return defaultConfig;
+  const configPath = getConfigPath();
+  if (!fs.existsSync(configPath)) return DEFAULT_CONFIG;
 
   try {
-    const data = fs.readFileSync(CONFIG_PATH, 'utf8');
-    const config = JSON.parse(data);
-    if (!config) return defaultConfig;
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (!config) return DEFAULT_CONFIG;
 
     // Migrate old includeCompanyName if exists
     if (config.filenamePattern === undefined && config.includeCompanyName !== undefined) {
@@ -92,17 +116,16 @@ function getConfig() {
       delete config.includeCompanyName;
     }
 
-    return { ...defaultConfig, ...config };
+    return { ...DEFAULT_CONFIG, ...config };
   } catch (e) {
     console.error('Failed to read config:', e);
-    return defaultConfig;
+    return DEFAULT_CONFIG;
   }
 }
 
 function saveConfig(config) {
-  const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
   try {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+    fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2));
     return true;
   } catch (e) {
     console.error('Failed to save config:', e);
@@ -122,10 +145,10 @@ const handleDevToolsShortcut = (targetWebContents) => (event, input) => {
 };
 
 function createBrowserView() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!isMainWindowAlive()) return;
 
   browserView = new BrowserView({
-    webPreferences: { 
+    webPreferences: {
       nodeIntegration: false, 
       contextIsolation: true,
       backgroundThrottling: false,
@@ -135,7 +158,7 @@ function createBrowserView() {
   mainWindow.setBrowserView(browserView);
 
   const updateBounds = () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (!isMainWindowAlive()) return;
     const { width, height } = mainWindow.getContentBounds();
     browserView.setBounds({ x: 450, y: 0, width: width - 450, height: height });
   };
@@ -161,7 +184,7 @@ function createWindow() {
     show: true,
     backgroundColor: '#1a1a2e',
     paintWhenInitiallyHidden: false,
-    icon: path.join(__dirname, 'assets/icons/icon.png'),
+    icon: ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -169,7 +192,7 @@ function createWindow() {
       spellcheck: false,
       backgroundThrottling: false,
     },
-    title: '股東會投票幫手',
+    title: APP_TITLE,
   });
 
   mainWindow.loadFile(path.join(__dirname, 'src/renderer/index.html'));
@@ -180,12 +203,13 @@ function createWindow() {
   });
 
   setTimeout(createBrowserView, 400);
-
-  app.on('select-client-certificate', (event, webContents, url, list, callback) => {
-    event.preventDefault();
-    if (list && list.length > 0) callback(list[0]);
-  });
 }
+
+// Auto-pick the first client certificate so login never blocks on a picker
+app.on('select-client-certificate', (event, webContents, url, list, callback) => {
+  event.preventDefault();
+  if (list && list.length > 0) callback(list[0]);
+});
 
 app.whenReady().then(() => {
   createWindow();
@@ -205,20 +229,14 @@ ipcMain.handle('get-app-version', () => APP_VERSION);
 ipcMain.handle('start-voting', async (event, params) => {
   const { ids, outputDir, folderStructure, filenamePattern } = params;
   stopRequested = false;
-  const automation = require('./src/automation/main_flow');
-  const { calculateProgress } = require('./src/automation/utils');
 
   let maxPercent = 0;
   const sendProgress = (progress) => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send('progress', JSON.parse(JSON.stringify(progress)));
-
-    const currentPercent = calculateProgress(progress);
-    if (currentPercent > maxPercent) {
-      maxPercent = currentPercent;
-    }
-
-    mainWindow.setTitle(`(${maxPercent}%) 股東會投票幫手`);
+    if (!isMainWindowAlive()) return;
+    // Never let the percentage go backwards (e.g. on account retry)
+    maxPercent = Math.max(maxPercent, calculateProgress(progress));
+    mainWindow.webContents.send('progress', JSON.parse(JSON.stringify({ ...progress, percent: maxPercent })));
+    mainWindow.setTitle(`(${maxPercent}%) ${APP_TITLE}`);
   };
 
   try {
@@ -233,31 +251,18 @@ ipcMain.handle('start-voting', async (event, params) => {
       filenamePattern
     );
 
-    if (!mainWindow || mainWindow.isDestroyed()) return { success: true };
+    if (!isMainWindowAlive()) return { success: true };
 
-    mainWindow.setTitle('股東會投票幫手');
+    mainWindow.setTitle(APP_TITLE);
     const msg = `累計投票: ${stats.voted}，累計截圖: ${stats.screenshoted}`;
     sendLog(`[系統] 完成。${msg}`);
-
-    if (!mainWindow.isFocused() && Notification.isSupported()) {
-      new Notification({
-        title: '投票完成',
-        body: msg,
-        icon: path.join(__dirname, 'assets/icons/icon.png'),
-      }).show();
-    }
+    notifyIfUnfocused('投票完成', msg);
 
     return { success: true };
   } catch (error) {
-    if (!mainWindow || mainWindow.isDestroyed()) return { success: false, error: error.message };
-
-    mainWindow.setTitle('股東會投票幫手');
-    if (!mainWindow.isFocused() && Notification.isSupported()) {
-      new Notification({
-        title: '投票錯誤',
-        body: error.message,
-        icon: path.join(__dirname, 'assets/icons/icon.png'),
-      }).show();
+    if (isMainWindowAlive()) {
+      mainWindow.setTitle(APP_TITLE);
+      notifyIfUnfocused('投票錯誤', error.message);
     }
 
     return { success: false, error: error.message };
@@ -278,7 +283,7 @@ ipcMain.handle('open-about', async () => {
     height: 450,
     resizable: false,
     autoHideMenuBar: true,
-    title: '關於股東會投票幫手',
+    title: `關於${APP_TITLE}`,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -296,7 +301,7 @@ ipcMain.handle('open-external', async (event, url) => {
 
 ipcMain.handle('stop-voting', () => {
   stopRequested = true;
-  if (browserView && browserView.webContents && !browserView.webContents.isDestroyed()) {
+  if (browserView?.webContents && !browserView.webContents.isDestroyed()) {
     browserView.webContents.stop();
   }
   return { success: true };

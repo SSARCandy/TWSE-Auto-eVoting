@@ -40,36 +40,19 @@ function randomDelay(min = 400, max = 800) {
  */
 function waitForNavigation(webContents, timeoutMs = 30000) {
   return new Promise((resolve) => {
-    let resolved = false;
+    let timer = null;
 
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        webContents.removeListener('did-finish-load', onFinish);
-        webContents.removeListener('did-fail-load', onFail);
-        resolve(false);
-      }
-    }, timeoutMs);
-
-    const onFinish = () => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeout);
-        webContents.removeListener('did-fail-load', onFail);
-        resolve(true);
-      }
+    // Resolve false on failure/timeout to keep the boolean check flow
+    const finish = (result) => {
+      clearTimeout(timer);
+      webContents.removeListener('did-finish-load', onFinish);
+      webContents.removeListener('did-fail-load', onFail);
+      resolve(result);
     };
+    const onFinish = () => finish(true);
+    const onFail = () => finish(false);
 
-    const onFail = (event, errorCode, errorDescription, validatedURL) => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeout);
-        webContents.removeListener('did-finish-load', onFinish);
-        // We resolve false on failure to maintain compatibility with existing boolean check flow
-        resolve(false);
-      }
-    };
-
+    timer = setTimeout(() => finish(false), timeoutMs);
     webContents.once('did-finish-load', onFinish);
     webContents.once('did-fail-load', onFail);
   });
@@ -84,12 +67,16 @@ function waitForNavigation(webContents, timeoutMs = 30000) {
  * @returns {Promise<any>} The result of the script or an error string
  */
 async function safeExecute(webContents, script, timeoutMs = 3000) {
+  let timer = null;
   try {
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs));
-    const execPromise = webContents.executeJavaScript(script);
-    return await Promise.race([execPromise, timeoutPromise]);
+    const timeoutPromise = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs);
+    });
+    return await Promise.race([webContents.executeJavaScript(script), timeoutPromise]);
   } catch (err) {
     return `ERROR: ${err.message}`;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -99,7 +86,20 @@ async function safeExecute(webContents, script, timeoutMs = 3000) {
  */
 function isMaintenanceTime() {
   const taiwanHour = (new Date().getUTCHours() + 8) % 24;
-  return taiwanHour >= 0 && taiwanHour < 7;
+  return taiwanHour < 7;
+}
+
+/**
+ * Resolves the folder where screenshots for an account are stored.
+ *
+ * @param {string} nationalId User's national ID
+ * @param {string} outputDir Base output directory (defaults to Documents/投票證明)
+ * @param {string} folderStructure 'by_id' (sub-folder per ID) or 'flat'
+ * @returns {string} Absolute folder path
+ */
+function getScreenshotDir(nationalId, outputDir, folderStructure = 'by_id') {
+  const baseDir = outputDir || path.join(app.getPath('documents'), '投票證明');
+  return folderStructure === 'flat' ? baseDir : path.join(baseDir, nationalId);
 }
 
 const dirCache = new Map();
@@ -107,11 +107,15 @@ const dirCache = new Map();
 /**
  * Checks if a screenshot proof already exists for a given ID and stock code/company.
  * Uses fuzzy matching to find any file containing both ID and Code.
+ *
+ * @param {string} nationalId User's national ID
+ * @param {string|object} company Stock code or company object with 'code'
+ * @param {string} outputDir Base output directory
+ * @param {string} folderStructure 'by_id' or 'flat'
+ * @returns {boolean}
  */
-function isScreenshotExists(nationalId, company, outputDir, folderStructure = 'by_id', filenamePattern = null) {
-  const baseDir = outputDir || path.join(app.getPath('documents'), '投票證明');
-  const dir = folderStructure === 'flat' ? baseDir : path.join(baseDir, nationalId);
-
+function isScreenshotExists(nationalId, company, outputDir, folderStructure = 'by_id') {
+  const dir = getScreenshotDir(nationalId, outputDir, folderStructure);
   if (!fs.existsSync(dir)) return false;
 
   const code = typeof company === 'string' ? company : company.code;
@@ -128,7 +132,7 @@ function isScreenshotExists(nationalId, company, outputDir, folderStructure = 'b
   // Fuzzy match: check if segments (split by _) match both nationalId AND company code exactly
   return files.some(file => {
     if (!file.endsWith('.png')) return false;
-    const parts = file.replace('.png', '').split('_');
+    const parts = file.slice(0, -'.png'.length).split('_');
     return parts.includes(nationalId) && parts.includes(code);
   });
 }
@@ -151,8 +155,8 @@ function calculateProgress(data) {
   } else if (status === 'initializing') {
     accountProgress = 0;
   } else {
-    const hasVote = vote && vote.total > 0;
-    const hasShot = screenshot && screenshot.total > 0;
+    const hasVote = vote?.total > 0;
+    const hasShot = screenshot?.total > 0;
 
     if (hasVote && hasShot) {
       accountProgress = (vote.current / vote.total * 0.5) + (screenshot.current / screenshot.total * 0.5);
@@ -173,6 +177,7 @@ module.exports = {
   waitForNavigation,
   safeExecute,
   isMaintenanceTime,
+  getScreenshotDir,
   isScreenshotExists,
   calculateProgress,
 };

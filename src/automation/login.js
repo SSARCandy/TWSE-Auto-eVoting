@@ -1,6 +1,24 @@
 const CONSTANTS = require('../constants');
 const { waitForNavigation, safeExecute, delay } = require('./utils');
 
+/**
+ * True while the URL is still the login page (not yet redirected to index).
+ * @param {string} url
+ * @returns {boolean}
+ */
+function isOnLoginPage(url) {
+  return url.includes('login') && !url.includes('index');
+}
+
+/**
+ * True when a safeExecute() result is a timeout or a destroyed-page error, which we tolerate silently.
+ * @param {string} result
+ * @returns {boolean}
+ */
+function isIgnorableExecError(result) {
+  return result.startsWith('ERROR: TIMEOUT') || result.includes('destroyed');
+}
+
 async function execute(webContents, nationalId, sendLog) {
   sendLog('[登入] 跳轉頁面...');
 
@@ -51,10 +69,9 @@ async function execute(webContents, nationalId, sendLog) {
       }
       await delay(Math.floor(Math.random() * 400) + 400);
 
-      const idInput = document.querySelector('input[placeholder*="身分證"]') || 
+      const idInput = document.querySelector('input[placeholder*="身分證"]') ||
                       document.querySelector('input[placeholder*="統編"]') ||
-                      document.querySelector('input.required[placeholder*="身分證"]') || 
-                      document.getElementById('pageIdNo') || 
+                      document.getElementById('pageIdNo') ||
                       document.getElementById('idNo') ||
                       document.querySelector('input[name="idNo"]');
       
@@ -62,7 +79,7 @@ async function execute(webContents, nationalId, sendLog) {
 
       idInput.focus();
       await delay(Math.floor(Math.random() * 100) + 100);
-      idInput.value = '${nationalId}';
+      idInput.value = ${JSON.stringify(nationalId)};
       ['input', 'change', 'blur'].forEach(evt => idInput.dispatchEvent(new Event(evt, { bubbles: true })));
       
       await delay(Math.floor(Math.random() * 400) + 400);
@@ -77,7 +94,7 @@ async function execute(webContents, nationalId, sendLog) {
 
   try {
     const success = await safeExecute(webContents, loginScript, 4000);
-    if (typeof success === 'string' && success.includes('ERROR:') && !success.includes('TIMEOUT') && !success.includes('destroyed')) {
+    if (typeof success === 'string' && success.startsWith('ERROR:') && !isIgnorableExecError(success)) {
       sendLog('[警告] 填寫異常。', 'warning');
     }
 
@@ -125,27 +142,21 @@ async function execute(webContents, nationalId, sendLog) {
     if (resultStr.startsWith("DOM_MODAL_CLICKED") || resultStr.startsWith("NATIVE_DIALOG_CAPTURED")) {
       sendLog('[登入] 偵測提示，已點選。');
       await waitForNavigation(webContents);
-    } else if (resultStr !== "NO_DIALOG_FOUND" && !resultStr.startsWith("ERROR: TIMEOUT") && !resultStr.includes('destroyed')) {
+    } else if (resultStr !== "NO_DIALOG_FOUND" && !isIgnorableExecError(resultStr)) {
       sendLog('[警告] 登入對話框異常', 'warning');
     }
 
-    let currentUrl = webContents.getURL();
-    for (let k = 0; k < 5; k++) {
-      if (!currentUrl.includes('login') || currentUrl.includes('index')) break;
+    for (let k = 0; k < 5 && isOnLoginPage(webContents.getURL()); k++) {
       await delay(1000);
-      currentUrl = webContents.getURL();
     }
 
-    if (currentUrl.includes('login') && !currentUrl.includes('index')) {
-      sendLog('[警告] 未跳轉，手動導航...', 'warning');
-      const waitIdx = waitForNavigation(webContents);
-      await webContents.loadURL(CONSTANTS.URLS.INDEX);
-      await waitIdx;
-      currentUrl = webContents.getURL();
-      if (currentUrl.includes('login') && !currentUrl.includes('index')) return false;
-    }
+    if (!isOnLoginPage(webContents.getURL())) return true;
 
-    return true;
+    sendLog('[警告] 未跳轉，手動導航...', 'warning');
+    const waitIdx = waitForNavigation(webContents);
+    await webContents.loadURL(CONSTANTS.URLS.INDEX);
+    await waitIdx;
+    return !isOnLoginPage(webContents.getURL());
   } catch (err) {
     sendLog(`[登入] 腳本錯誤: ${err.message}`, 'error');
     return false;

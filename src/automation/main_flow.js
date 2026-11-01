@@ -6,18 +6,48 @@ const logout = require('./logout');
 const CONSTANTS = require('../constants');
 const { randomDelay, waitForNavigation, isMaintenanceTime, isScreenshotExists } = require('./utils');
 
+/**
+ * Errors that mean we lost our place on the site; they abort the account and trigger a retry.
+ * @param {Error} err
+ * @returns {boolean}
+ */
+function isNavLostError(err) {
+  return err.message.includes('NAV_LOST') || err.message.includes('找不到搜尋元件');
+}
+
+/** Counts one finished vote for the account and the session. */
+function countVote(context) {
+  context.currentVote++;
+  context.sessionStats.voted++;
+}
+
+/** Counts one finished screenshot for the account and the session. */
+function countShot(context) {
+  context.currentShot++;
+  context.sessionStats.screenshoted++;
+}
+
+/**
+ * Runs a click script in the page and waits for the navigation it triggers.
+ * @param {object} webContents The Electron WebContents instance
+ * @param {string} clickScript Script that clicks something and returns true, or false if not found
+ * @returns {Promise<boolean>} Whether the click happened
+ */
+async function clickAndWait(webContents, clickScript) {
+  const waitNav = waitForNavigation(webContents);
+  const clicked = await webContents.executeJavaScript(clickScript);
+  if (clicked) await waitNav;
+  return clicked;
+}
+
 async function processCompany(webContents, id, company, context, sendLog, emitProgress, isStopRequested) {
-  const { pendingCodes, outputDir, folderStructure, filenamePattern, i, idsLength, sessionStats } = context;
+  const { pendingCodes, outputDir, folderStructure, filenamePattern } = context;
   const { code } = company;
 
-  if (company.status !== 'pending' && isScreenshotExists(id, company, outputDir, folderStructure, filenamePattern)) {
+  if (company.status !== 'pending' && isScreenshotExists(id, company, outputDir, folderStructure)) {
     sendLog(`[清單] ${code} 已有截圖，跳過。`);
-    if (pendingCodes.includes(code)) {
-      context.currentVote++;
-      sessionStats.voted++;
-    }
-    context.currentShot++;
-    sessionStats.screenshoted++;
+    if (pendingCodes.includes(code)) countVote(context);
+    countShot(context);
     emitProgress();
     return;
   }
@@ -34,34 +64,27 @@ async function processCompany(webContents, id, company, context, sendLog, emitPr
       if (isStopRequested()) return;
       sendLog(`[投票] ${code} 成功。`);
 
-      context.currentVote++;
-      sessionStats.voted++;
+      countVote(context);
       emitProgress();
 
       sendLog('[導航] 返回查詢...');
-      const waitGo = waitForNavigation(webContents);
-      const clickedGo = await webContents.executeJavaScript(`(() => { const btn = document.getElementById('go'); if(btn){ btn.click(); return true; } return false; })()`);
+      const clickedGo = await clickAndWait(webContents, `(() => { const btn = document.getElementById('go'); if(btn){ btn.click(); return true; } return false; })()`);
       if (!clickedGo) {
         sendLog('[導航] 無確認鈕，回列表');
         await voting.navigateBackToList(webContents, sendLog);
         await voting.ensureOnListPage(webContents, sendLog, true);
-      } else {
-        await waitGo;
       }
       await randomDelay(200, 500);
 
       if (isStopRequested()) return;
       sendLog(`[截圖] 查詢 ${code}...`);
-      const waitQry = waitForNavigation(webContents);
-      const clickedQry = await webContents.executeJavaScript(`(() => { const link = document.querySelector('a[onclick*="\\'${code}\\',\\'qry\\'"]'); if(link){ link.click(); return true; } return false; })()`);
+      const clickedQry = await clickAndWait(webContents,`(() => { const link = document.querySelector('a[onclick*="\\'${code}\\',\\'qry\\'"]'); if(link){ link.click(); return true; } return false; })()`);
       if (!clickedQry) throw new Error(`找不到股號 ${code} 的查詢連結`);
-      await waitQry;
       await randomDelay(300, 700);
     } else {
       sendLog(`[導航] 已投過，在查詢頁...`);
       if (pendingCodes.includes(code)) {
-        context.currentVote++;
-        sessionStats.voted++;
+        countVote(context);
         emitProgress();
       }
     }
@@ -81,17 +104,14 @@ async function processCompany(webContents, id, company, context, sendLog, emitPr
       }
     }
 
-    context.currentShot++;
-    sessionStats.screenshoted++;
+    countShot(context);
     emitProgress();
-
   } catch (procError) {
     if (isStopRequested()) return;
-    
-    if (procError.message.includes('NAV_LOST') || procError.message.includes('找不到搜尋元件')) {
-      throw procError; // Propagate fatal errors to trigger account-level retry
-    }
-    
+
+    // Propagate fatal errors to trigger account-level retry
+    if (isNavLostError(procError)) throw procError;
+
     sendLog(`[錯誤] ${code} 異常: ${procError.message}，下一間。`, 'error');
   }
 }
@@ -111,8 +131,6 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
       outputDir,
       folderStructure,
       filenamePattern,
-      i,
-      idsLength: ids.length,
       totalVotes: 0,
       totalShots: 0,
       currentVote: 0,
@@ -162,19 +180,15 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
       const companies = await voting.getCompanyList(webContents, sendLog);
 
       const pendingCompanies = companies.filter(c => c.status === 'pending');
-      const votedNeedScreenshot = companies.filter(c => c.status === 'voted' && !isScreenshotExists(id, c, outputDir, folderStructure, filenamePattern) && !c.hasEGift);
+      const votedNeedScreenshot = companies.filter(c => c.status === 'voted' && !c.hasEGift && !isScreenshotExists(id, c, outputDir, folderStructure));
       const targetCompanies = [...pendingCompanies, ...votedNeedScreenshot];
 
       context.pendingCodes = pendingCompanies.map(c => c.code);
       context.totalVotes = pendingCompanies.length;
       context.totalShots = targetCompanies.length;
       
-      // Deduct previous stats if retrying to avoid double counting
-      if (retryCount > 0) {
-        // This is tricky because we don't know how much was already added.
-        // For simplicity, sessionStats should probably only be updated on success or at the end.
-        // But the UI needs it. Let's just add the delta if we can.
-      } else {
+      // Only add totals on the first attempt so a retry does not double count
+      if (retryCount === 0) {
         sessionStats.totalVotes += context.totalVotes;
         sessionStats.totalShots += context.totalShots;
       }
@@ -211,9 +225,7 @@ async function processId(webContents, id, i, ids, sendLog, sendProgress, isStopR
     } catch (error) {
       if (isStopRequested()) return;
       
-      const isNavLost = error.message.includes('NAV_LOST') || error.message.includes('找不到搜尋元件');
-      
-      if (isNavLost && retryCount < maxRetries) {
+      if (isNavLostError(error) && retryCount < maxRetries) {
         sendLog(`[系統] ${maskedId} 導航遺失: ${error.message}，準備重試。`, 'warning');
         retryCount++;
         await logout.execute(webContents, sendLog).catch(() => {});
