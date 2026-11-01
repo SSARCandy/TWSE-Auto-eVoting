@@ -4,6 +4,50 @@
 const { delay, randomDelay, waitForNavigation, safeExecute } = require('./utils');
 const { URLS } = require('../constants');
 
+const DISMISS_MSG_DIALOG_SCRIPT = `
+  (() => {
+    const dialog = document.getElementById('msgDialog');
+    if (dialog && dialog.style.display !== 'none' && dialog.offsetHeight > 0) {
+      const msg = document.getElementById('msgDialog_msg');
+      const btn = document.getElementById('msgDialog_okBtn');
+      if (btn) btn.click();
+      return msg ? msg.innerText.trim() : '操作被擋截';
+    }
+    return null;
+  })()
+`;
+
+/**
+ * Polls for a blocking modal (e.g. "您尚未對【...】進行電子投票作業") until the
+ * pending navigation finishes, clicking OK whenever one shows up, then waits for that navigation.
+ * A dismissed dialog may block navigation; we keep going and let the navigation wait time out.
+ *
+ * @param {object} webContents The Electron WebContents instance
+ * @param {Promise<boolean>} navPromise Pending waitForNavigation() promise
+ * @param {Function} sendLog Logger
+ * @param {object} [options]
+ * @param {boolean} [options.throwOnCaptchaFail] Throw RECAPTCHA_FAILED if the dialog reports '驗證失敗'
+ * @returns {Promise<void>}
+ */
+async function dismissModalsUntilNavigated(webContents, navPromise, sendLog, { throwOnCaptchaFail = false } = {}) {
+  let isNavigated = false;
+  navPromise.then(() => isNavigated = true);
+
+  for (let j = 0; j < 6; j++) {
+    if (isNavigated) break;
+    const modalText = await safeExecute(webContents, DISMISS_MSG_DIALOG_SCRIPT);
+    if (typeof modalText === 'string' && modalText && !modalText.startsWith('ERROR:')) {
+      sendLog(`[警告] 彈出提示: ${modalText}`, 'warning');
+      if (throwOnCaptchaFail && modalText.includes('驗證失敗')) {
+        throw new Error(`RECAPTCHA_FAILED: ${modalText}`);
+      }
+    }
+    await delay(500);
+  }
+
+  await navPromise;
+}
+
 /**
  * Grabs the list of companies from the current table.
  * Supports pagination by clicking "Next Page" until exhausted.
@@ -232,36 +276,7 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false, 
       sendLog('[投票] 偵測確認頁，點擊送出。');
       submitted = true;
 
-      let isNavigated = false;
-      waitNext.then(() => isNavigated = true);
-
-      // Check for blocking modal like "您尚未對【...】進行電子投票作業" that prevents navigation after submit
-      for (let j = 0; j < 6; j++) {
-        if (isNavigated) break;
-        const modalText = await safeExecute(webContents, `
-          (() => {
-            const dialog = document.getElementById('msgDialog');
-            if (dialog && dialog.style.display !== 'none' && dialog.offsetHeight > 0) {
-              const msg = document.getElementById('msgDialog_msg');
-              const btn = document.getElementById('msgDialog_okBtn');
-              if (btn) btn.click();
-              return msg ? msg.innerText.trim() : '操作被擋截';
-            }
-            return null;
-          })()
-        `);
-        if (modalText && typeof modalText === 'string' && !modalText.startsWith('ERROR:')) {
-          sendLog(`[警告] 彈出提示: ${modalText}`, 'warning');
-          if (modalText.includes('驗證失敗')) {
-            throw new Error(`RECAPTCHA_FAILED: ${modalText}`);
-          }
-          // If dialog is dismissed, it might not navigate, but we don't want to abort.
-          // Breaking the loop will let it continue, and it will await the navigation (which might timeout if blocked).
-        }
-        await delay(500);
-      }
-
-      await waitNext;
+      await dismissModalsUntilNavigated(webContents, waitNext, sendLog, { throwOnCaptchaFail: true });
       if (isStopRequested()) return;
       await randomDelay(1500, 3000);
       break;
@@ -269,36 +284,13 @@ async function voteForCompany(webContents, company, sendLog, skipClick = false, 
 
     sendLog('[投票] 本頁完成，點擊下一步...');
 
-    let isNavigatedNext = false;
-    waitNext.then(() => isNavigatedNext = true);
-
     // Also check for modal after clicking "Next" just in case
-    for (let j = 0; j < 6; j++) {
-      if (isNavigatedNext) break;
-      const modalText = await safeExecute(webContents, `
-        (() => {
-          const dialog = document.getElementById('msgDialog');
-          if (dialog && dialog.style.display !== 'none' && dialog.offsetHeight > 0) {
-            const msg = document.getElementById('msgDialog_msg');
-            const btn = document.getElementById('msgDialog_okBtn');
-            if (btn) btn.click();
-            return msg ? msg.innerText.trim() : '操作被擋截';
-          }
-          return null;
-        })()
-      `);
-      if (modalText && typeof modalText === 'string' && !modalText.startsWith('ERROR:')) {
-        sendLog(`[警告] 彈出提示: ${modalText}`, 'warning');
-      }
-      await delay(500);
-    }
-
-    await waitNext;
+    await dismissModalsUntilNavigated(webContents, waitNext, sendLog);
     if (isStopRequested()) return;
     await randomDelay(1500, 3000);
   }
 
-  if (!submitted && pageCount >= maxPages) throw new Error(`超過最大頁數限制 (${maxPages})`);
+  if (!submitted) throw new Error(`超過最大頁數限制 (${maxPages})`);
 
   if (isStopRequested()) return;
 
@@ -329,7 +321,7 @@ async function searchAndNavigate(webContents, stockCode, sendLog) {
                   document.querySelector('a.search-btn');
       if (!input || !btn) return { success: false, reason: '找不到搜尋元件' };
       input.focus();
-      input.value = '${stockCode}';
+      input.value = ${JSON.stringify(stockCode)};
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
       btn.click();
@@ -346,7 +338,7 @@ async function searchAndNavigate(webContents, stockCode, sendLog) {
       const waitSearchNav = waitForNavigation(webContents);
       const linkResult = await webContents.executeJavaScript(`
             (() => {
-                const rows = Array.from(document.querySelectorAll('tr')).filter(row => row.innerText.includes('${stockCode}'));
+                const rows = Array.from(document.querySelectorAll('tr')).filter(row => row.innerText.includes(${JSON.stringify(stockCode)}));
                 if (rows.length === 0) return null;
                 const link = Array.from(rows[0].querySelectorAll('a.c-actLink, a.u-link')).find(a => 
                     ['投票', '查詢', 'Vote', 'Check'].some(kw => a.innerText.includes(kw))
@@ -361,33 +353,7 @@ async function searchAndNavigate(webContents, stockCode, sendLog) {
         `);
 
       if (linkResult && linkResult.found) {
-        let isNavigated = false;
-        waitSearchNav.then(() => isNavigated = true);
-
-        // Check for blocking modal like "您尚未對【...】進行電子投票作業"
-        for (let j = 0; j < 6; j++) {
-          if (isNavigated) break;
-          const modalText = await safeExecute(webContents, `
-            (() => {
-              const dialog = document.getElementById('msgDialog');
-              if (dialog && dialog.style.display !== 'none' && dialog.offsetHeight > 0) {
-                const msg = document.getElementById('msgDialog_msg');
-                const btn = document.getElementById('msgDialog_okBtn');
-                if (btn) btn.click();
-                return msg ? msg.innerText.trim() : '操作被擋截';
-              }
-              return null;
-            })()
-          `);
-          if (modalText && typeof modalText === 'string' && !modalText.startsWith('ERROR:')) {
-            sendLog(`[警告] 彈出提示: ${modalText}`, 'warning');
-            // If dialog is dismissed, it might not navigate, but we don't want to abort.
-            // Breaking the loop will let it continue, and it will await the navigation (which might timeout if blocked).
-          }
-          await delay(500);
-        }
-
-        await waitSearchNav;
+        await dismissModalsUntilNavigated(webContents, waitSearchNav, sendLog);
         await randomDelay(1500, 3000);
         return { success: true, type: linkResult.type };
       }
@@ -430,13 +396,11 @@ async function navigateBackToList(webContents, sendLog) {
     const clickedBack = await webContents.executeJavaScript(returnListScript);
     if (clickedBack) {
       await waitForNavigation(webContents, 8000);
-    } else {
-      if (!(await isAtListPage(webContents))) {
-        sendLog('[導航] 無回列表鈕，嘗試回上頁...');
-        const waitP = waitForNavigation(webContents, 5000);
-        webContents.goBack();
-        await waitP;
-      }
+    } else if (!(await isAtListPage(webContents))) {
+      sendLog('[導航] 無回列表鈕，嘗試回上頁...');
+      const waitP = waitForNavigation(webContents, 5000);
+      webContents.goBack();
+      await waitP;
     }
   } catch (e) {
     sendLog(`[導航] 返回過程異常: ${e.message}`, 'warning');
@@ -465,7 +429,7 @@ async function isAtListPage(webContents) {
   `;
   try {
     return await webContents.executeJavaScript(checkListScript);
-  } catch (e) {
+  } catch {
     return false;
   }
 }

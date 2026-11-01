@@ -19,6 +19,7 @@ const UI = {
     copyLog: document.getElementById('copy-log'),
     clearLog: document.getElementById('clear-log'),
   },
+  aboutIcon: document.getElementById('about-icon'),
   status: {
     dot: document.getElementById('status-dot'),
     text: document.getElementById('status-text'),
@@ -39,7 +40,6 @@ const UI = {
 const State = {
   config: { outputDir: '', ids: '', folderStructure: 'by_id', filenamePattern: '{id}_{code}' },
   saveTimeout: null,
-  lastProgress: 0,
   chipDefinitions: [
     { id: '{id}', label: '身分證字號', required: true, example: 'A123456789' },
     { id: '{code}', label: '股號', required: true, example: '2330' },
@@ -55,8 +55,7 @@ const App = {
   async init() {
     State.config = await window.electronAPI.getConfig();
     const version = await window.electronAPI.getAppVersion();
-    const versionEl = document.getElementById('about-icon');
-    if (versionEl) versionEl.textContent = `v${version}`;
+    if (UI.aboutIcon) UI.aboutIcon.textContent = `v${version}`;
 
     if (State.config.outputDir) UI.inputs.outputDir.value = State.config.outputDir;
     if (State.config.ids) UI.inputs.ids.value = State.config.ids;
@@ -76,9 +75,7 @@ const App = {
     // Add active chips in order
     activeParts.forEach(part => {
       const def = State.chipDefinitions.find(d => d.id === part);
-      if (def) {
-        UI.chips.container.appendChild(this.createChipElement(def, true));
-      }
+      if (def) UI.chips.container.appendChild(this.createChipElement(def, true));
     });
 
     // Add inactive optional chips
@@ -113,26 +110,19 @@ const App = {
       chip.classList.remove('dragging');
     });
 
-    if (!def.required) {
-      const btn = chip.querySelector('.remove-btn');
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.toggleChip(def.id);
-      });
-    }
+    if (def.required) return chip;
 
+    chip.querySelector('.remove-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleChip(def.id);
+    });
     return chip;
   },
 
   toggleChip(id) {
     const parts = UI.inputs.filenamePattern.value.split('_').filter(p => p);
-    const index = parts.indexOf(id);
-    if (index > -1) {
-      parts.splice(index, 1);
-    } else {
-      parts.push(id);
-    }
-    State.config.filenamePattern = parts.join('_');
+    const nextParts = parts.includes(id) ? parts.filter(p => p !== id) : [...parts, id];
+    State.config.filenamePattern = nextParts.join('_');
     this.renderChips();
     this.debouncedSave();
   },
@@ -152,10 +142,7 @@ const App = {
       return;
     }
 
-    let preview = pattern;
-    State.chipDefinitions.forEach(def => {
-      preview = preview.replace(new RegExp(def.id.replace(/{/g, '\\{').replace(/}/g, '\\}'), 'g'), def.example);
-    });
+    const preview = State.chipDefinitions.reduce((text, def) => text.replaceAll(def.id, def.example), pattern);
     UI.chips.preview.textContent = `預覽：${preview}.png`;
   },
 
@@ -168,12 +155,9 @@ const App = {
       const dragging = document.querySelector('.dragging');
       if (!dragging) return;
 
+      // insertBefore(x, null) appends to the end
       const afterElement = this.getDragAfterElement(UI.chips.container, e.clientX, e.clientY);
-      if (afterElement == null) {
-        UI.chips.container.appendChild(dragging);
-      } else {
-        UI.chips.container.insertBefore(dragging, afterElement);
-      }
+      UI.chips.container.insertBefore(dragging, afterElement ?? null);
     });
 
     UI.chips.container.addEventListener('drop', (e) => {
@@ -188,12 +172,7 @@ const App = {
     UI.buttons.copyLog.addEventListener('click', this.handleCopyLog.bind(this));
     UI.buttons.clearLog.addEventListener('click', this.handleClearLog.bind(this));
 
-    const versionEl = document.getElementById('about-icon');
-    if (versionEl) {
-      versionEl.addEventListener('click', () => {
-        window.electronAPI.openAbout();
-      });
-    }
+    if (UI.aboutIcon) UI.aboutIcon.addEventListener('click', () => window.electronAPI.openAbout());
 
     window.onerror = (message, source, lineno) => this.addLog(`[System UI Error] ${message} (at ${source}:${lineno})`, 'error');
     window.onunhandledrejection = (event) => this.addLog(`[Async Error] ${event.reason}`, 'error');
@@ -208,13 +187,8 @@ const App = {
       const offsetY = y - box.top - box.height / 2;
 
       // Calculate Euclidean distance for better multi-line support
-      const distance = Math.sqrt(offsetX * offsetX + offsetY * offsetY);
-
-      if (distance < closest.distance) {
-        return { distance: distance, element: child };
-      } else {
-        return closest;
-      }
+      const distance = Math.hypot(offsetX, offsetY);
+      return distance < closest.distance ? { distance, element: child } : closest;
     }, { distance: Number.POSITIVE_INFINITY }).element;
   },
 
@@ -223,25 +197,29 @@ const App = {
     window.electronAPI.onProgress((data) => this.updateProgress(data));
   },
 
+  saveConfig() {
+    // Deep copy to send plain serializable data over IPC
+    return window.electronAPI.saveConfig(JSON.parse(JSON.stringify(State.config)));
+  },
+
   debouncedSave() {
     clearTimeout(State.saveTimeout);
-    State.saveTimeout = setTimeout(async () => {
+    State.saveTimeout = setTimeout(() => {
       State.config.ids = UI.inputs.ids.value;
       State.config.folderStructure = UI.inputs.folderStructure.value;
       State.config.filenamePattern = UI.inputs.filenamePattern.value;
-
-      await window.electronAPI.saveConfig(JSON.parse(JSON.stringify(State.config)));
+      return this.saveConfig();
     }, 1000);
   },
 
   async handleBrowse() {
     const selectedDir = await window.electronAPI.selectDirectory();
-    if (selectedDir) {
-      UI.inputs.outputDir.value = selectedDir;
-      State.config.outputDir = selectedDir;
-      await window.electronAPI.saveConfig(JSON.parse(JSON.stringify(State.config)));
-      this.addLog(`輸出資料夾已更改為: ${selectedDir}`, 'info');
-    }
+    if (!selectedDir) return;
+
+    UI.inputs.outputDir.value = selectedDir;
+    State.config.outputDir = selectedDir;
+    await this.saveConfig();
+    this.addLog(`輸出資料夾已更改為: ${selectedDir}`, 'info');
   },
 
   async handleStart() {
@@ -265,7 +243,6 @@ const App = {
     }
 
     this.setUIState(true);
-    State.lastProgress = 0;
     UI.progress.val.textContent = '0%';
     UI.progress.fill.style.width = '0%';
     UI.progress.status.textContent = '(帳號: 0/0 | 投票: 0/0 | 截圖: 0/0)';
@@ -294,13 +271,13 @@ const App = {
 
   handleCopyLog() {
     const logs = Array.from(UI.log.container.querySelectorAll('.log-entry')).map(entry => entry.textContent).join('\n');
-    if (logs) {
-      navigator.clipboard.writeText(logs).then(() => {
-        const originalText = UI.buttons.copyLog.textContent;
-        UI.buttons.copyLog.textContent = '已複製';
-        setTimeout(() => UI.buttons.copyLog.textContent = originalText, 2000);
-      });
-    }
+    if (!logs) return;
+
+    navigator.clipboard.writeText(logs).then(() => {
+      const originalText = UI.buttons.copyLog.textContent;
+      UI.buttons.copyLog.textContent = '已複製';
+      setTimeout(() => UI.buttons.copyLog.textContent = originalText, 2000);
+    });
   },
 
   handleClearLog() {
@@ -317,39 +294,13 @@ const App = {
   },
 
   updateProgress(data) {
-    const { id, vote, screenshot, status } = data;
+    // `percent` is computed (and kept from going backwards) by the main process
+    const { id, vote, screenshot, percent } = data;
     if (!id || id.total <= 0) return;
 
-    const base = Math.max(0, id.current - 1);
-    let accountProgress = 0;
-
-    if (status === 'finished') {
-      accountProgress = 1;
-    } else if (status === 'initializing') {
-      accountProgress = 0;
-    } else {
-      const hasVote = vote?.total > 0;
-      const hasShot = screenshot?.total > 0;
-
-      if (hasVote && hasShot) {
-        accountProgress = (vote.current / vote.total * 0.5) + (screenshot.current / screenshot.total * 0.5);
-      } else if (hasVote) {
-        accountProgress = vote.current / vote.total;
-      } else if (hasShot) {
-        accountProgress = screenshot.current / screenshot.total;
-      }
-    }
-
-    let totalPercent = Math.min(100, Math.max(0, Math.floor(((base + accountProgress) / id.total) * 100)));
-
-    if (totalPercent < State.lastProgress) {
-      totalPercent = State.lastProgress;
-    }
-    State.lastProgress = totalPercent;
-
-    UI.progress.status.textContent = `(帳號: ${id?.current || 0}/${id?.total || 0} | 投票: ${vote?.globalCurrent || 0}/${vote?.globalTotal || 0} | 截圖: ${screenshot?.globalCurrent || 0}/${screenshot?.globalTotal || 0})`;
-    UI.progress.val.textContent = `${totalPercent}%`;
-    UI.progress.fill.style.width = `${totalPercent}%`;
+    UI.progress.status.textContent = `(帳號: ${id.current || 0}/${id.total || 0} | 投票: ${vote?.globalCurrent || 0}/${vote?.globalTotal || 0} | 截圖: ${screenshot?.globalCurrent || 0}/${screenshot?.globalTotal || 0})`;
+    UI.progress.val.textContent = `${percent}%`;
+    UI.progress.fill.style.width = `${percent}%`;
   },
 
   setUIState(isRunning) {
@@ -367,24 +318,26 @@ const App = {
     if (firstCharIndex === -1) return false;
 
     const firstNum = firstCharIndex + 10;
-    const d1 = Math.floor(firstNum / 10);
-    const d2 = firstNum % 10;
+    const prefix = [Math.floor(firstNum / 10), firstNum % 10];
     const weights = [1, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1];
+    const hasValidChecksum = (digits) => digits.reduce((sum, val, i) => sum + val * weights[i], 0) % 10 === 0;
 
+    // National ID (2nd char 1/2) or new resident certificate (8/9)
     if (/^[A-Z][1289]\d{8}$/.test(id)) {
-      const idDigits = [d1, d2, ...id.slice(1).split('').map(Number)];
-      return idDigits.reduce((sum, val, i) => sum + val * weights[i], 0) % 10 === 0;
-    } else if (/^[A-Z][A-D]\d{8}$/.test(id)) {
+      return hasValidChecksum([...prefix, ...id.slice(1).split('').map(Number)]);
+    }
+    // Old resident certificate (2nd char A-D)
+    if (/^[A-Z][A-D]\d{8}$/.test(id)) {
       const secondNum = (letters.indexOf(id[1]) + 10) % 10;
-      const idDigits = [d1, d2, secondNum, ...id.slice(2).split('').map(Number)];
-      return idDigits.reduce((sum, val, i) => sum + val * weights[i], 0) % 10 === 0;
+      return hasValidChecksum([...prefix, secondNum, ...id.slice(2).split('').map(Number)]);
     }
     return false;
   },
 
   isMaintenanceTime() {
+    // Mirrors isMaintenanceTime() in src/automation/utils.js (renderer cannot require Node modules)
     const taiwanHour = (new Date().getUTCHours() + 8) % 24;
-    return taiwanHour >= 0 && taiwanHour < 7;
+    return taiwanHour < 7;
   },
 };
 
